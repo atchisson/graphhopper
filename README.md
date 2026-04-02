@@ -119,8 +119,22 @@ See the [documentation](./docs/index.md) that contains e.g. [the elevation guide
 
 ### Docker
 
-The Docker images created by the community from the `master` branch can be found [here](https://hub.docker.com/r/israelhikingmap/graphhopper)
-(currently daily). See the [Dockerfile](https://github.com/IsraelHikingMap/graphhopper-docker-image-push) for more details.
+This fork includes a ready-to-use Docker setup that builds GraphHopper and downloads the OSM extract you choose at startup.
+
+Build and start (defaults to Centre-Val de Loire):
+
+```bash
+docker compose build
+docker compose up
+```
+
+Pick the extract with `OSM_REGION` (`centre` | `france`):
+
+```bash
+OSM_REGION=france docker compose up
+```
+
+Data and the generated graph are stored in `./data` on the host, so restarts do not re-download. Ports `8989` (web UI/API) and `8990` (Jetty admin) are exposed.
 
 ## GraphHopper Maps
 

@@ -1,0 +1,13 @@
+target
+graph-cache
+data
+*.pbf
+*.dem
+*.log
+logs
+local
+node_modules
+.git
+.gitignore
+.idea
+*.iml

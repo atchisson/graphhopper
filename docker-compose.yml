@@ -1,0 +1,15 @@
+services:
+  graphhopper:
+    build: .
+    container_name: graphhopper
+    environment:
+      - OSM_REGION=${OSM_REGION:-centre}
+      - JAVA_OPTS=${JAVA_OPTS:--Xmx4g}
+      - DATA_DIR=/data
+      - GRAPH_DIR=/data/graph-cache
+    ports:
+      - "8989:8989"
+      - "8990:8990"
+    volumes:
+      - ./data:/data
+    restart: unless-stopped
