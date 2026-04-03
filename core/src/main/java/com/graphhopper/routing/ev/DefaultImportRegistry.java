@@ -30,6 +30,10 @@ public class DefaultImportRegistry implements ImportRegistry {
                     (lookup, props) -> new OSMRoundaboutParser(
                             lookup.getBooleanEncodedValue(Roundabout.KEY))
             );
+        else if (PhotoCoverage.KEY_HAS_PHOTO.equals(name))
+            return ImportUnit.create(name, props -> PhotoCoverage.createHasPhoto(), null);
+        else if (PhotoCoverage.KEY_ONLY_360.equals(name))
+            return ImportUnit.create(name, props -> PhotoCoverage.createOnly360(), null);
         else if (GetOffBike.KEY.equals(name))
             return ImportUnit.create(name, props -> GetOffBike.create(),
                     (lookup, pros) -> new OSMGetOffBikeParser(

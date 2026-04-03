@@ -113,7 +113,7 @@ graphhopper:
     car_access, car_average_speed, country, road_class, roundabout, max_speed,
     foot_access, foot_average_speed, foot_priority, foot_road_access, hike_rating, average_slope,
     bike_access, bike_average_speed, bike_priority, bike_road_access, bike_network, mtb_rating, ferry_speed,
-    road_environment
+    road_environment, photo_coverage, photo_coverage_only360
 
   #### Speed, hybrid and flexible mode ####
 
@@ -243,6 +243,17 @@ graphhopper:
   # first rule matches
   # graph.dataaccess.mmap.preload.nodes_ch_car.*: 100
   # graph.dataaccess.mmap.preload.nodes_ch.*: 30
+
+  #### Photo coverage avoidance ####
+
+  # Optional GeoJSON produced by tools/panoramax_preprocess.py
+  photo_coverage.file: data/panoramax_coverage.geojson
+  # any: pénalise toute couverture ; only360 : pénalise uniquement si toutes les photos de la cellule sont 360°
+  photo_coverage.mode: any
+  # 0 désactive la pénalité ; valeur positive = poids appliqué par le custom model généré côté serveur
+  photo_coverage.weight: 0
+  # fournisseurs actifs (v1: panoramax uniquement ; les autres seront ignorés proprement)
+  photo_coverage.providers: panoramax
 
   #### Custom Areas ####
 

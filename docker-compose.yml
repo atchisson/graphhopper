@@ -7,6 +7,12 @@ services:
       - JAVA_OPTS=${JAVA_OPTS:--Xmx4g}
       - DATA_DIR=/data
       - GRAPH_DIR=/data/graph-cache
+      - PHOTO_WEIGHT=${PHOTO_WEIGHT:-0}
+      - PHOTO_MODE=${PHOTO_MODE:-any}
+      - PHOTO_PROVIDERS=${PHOTO_PROVIDERS:-panoramax}
+      - PHOTO_SOURCE=${PHOTO_SOURCE:-parquet}
+      - PHOTO_MVT_ZOOM=${PHOTO_MVT_ZOOM:-13}
+      - PHOTO_MVT_FLIPY=${PHOTO_MVT_FLIPY:-true}
     ports:
       - "8989:8989"
       - "8990:8990"

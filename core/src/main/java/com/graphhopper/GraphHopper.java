@@ -27,6 +27,8 @@ import com.graphhopper.config.CHProfile;
 import com.graphhopper.config.LMProfile;
 import com.graphhopper.config.Profile;
 import com.graphhopper.jackson.Jackson;
+import com.graphhopper.reader.PhotoCoverageApplier;
+import com.graphhopper.reader.PhotoCoverageLoader;
 import com.graphhopper.reader.dem.*;
 import com.graphhopper.reader.osm.OSMReader;
 import com.graphhopper.reader.osm.RestrictionTagParser;
@@ -131,6 +133,7 @@ public class GraphHopper {
     // for data reader
     private String osmFile;
     private ElevationProvider eleProvider = ElevationProvider.NOOP;
+    private GraphHopperConfig ghConfig;
     private ImportRegistry importRegistry = new DefaultImportRegistry();
     private PathDetailsBuilderFactory pathBuilderFactory = new PathDetailsBuilderFactory();
 
@@ -463,6 +466,7 @@ public class GraphHopper {
      */
     public GraphHopper init(GraphHopperConfig ghConfig) {
         ensureNotLoaded();
+        this.ghConfig = ghConfig;
         // disabling_allowed config options were removed for GH 3.0
         if (ghConfig.has("routing.ch.disabling_allowed"))
             throw new IllegalArgumentException("The 'routing.ch.disabling_allowed' configuration option is no longer supported");
@@ -890,6 +894,13 @@ public class GraphHopper {
             encodedValuesWithProps.put(MaxSpeedEstimated.KEY, new PMap());
         }
 
+        // photo coverage encoded values (optional)
+        String photoCoverageFile = ghConfig.getString("photo_coverage.file", "");
+        if (!isEmpty(photoCoverageFile)) {
+            encodedValuesWithProps.put(PhotoCoverage.KEY_HAS_PHOTO, new PMap());
+            encodedValuesWithProps.put(PhotoCoverage.KEY_ONLY_360, new PMap());
+        }
+
         Map<String, ImportUnit> activeImportUnits = new LinkedHashMap<>();
         ArrayDeque<String> deque = new ArrayDeque<>(encodedValuesWithProps.keySet());
         while (!deque.isEmpty()) {
@@ -955,6 +966,11 @@ public class GraphHopper {
 
         AreaIndex<CustomArea> areaIndex = new AreaIndex<>(customAreas);
 
+        // photo coverage areas (optional)
+        String photoCoverageFile = ghConfig.getString("photo_coverage.file", "");
+        List<CustomArea> photoAreas = isEmpty(photoCoverageFile) ? List.of() : PhotoCoverageLoader.load(Paths.get(photoCoverageFile));
+        AreaIndex<CustomArea> photoAreaIndex = photoAreas.isEmpty() ? null : new AreaIndex<>(photoAreas);
+
         eleProvider.init();
         logger.info("start creating graph from " + osmFile);
         OSMReader reader = new OSMReader(baseGraph.getBaseGraph(), osmParsers, osmReaderConfig).setFile(_getOSMFile()).
@@ -968,6 +984,19 @@ public class GraphHopper {
             reader.readGraph();
         } catch (IOException ex) {
             throw new RuntimeException("Cannot read file " + getOSMFile(), ex);
+        }
+
+        // apply photo coverage encoded values after graph creation
+        if (photoAreaIndex != null && encodingManager != null &&
+                encodingManager.hasEncodedValue(PhotoCoverage.KEY_HAS_PHOTO) &&
+                encodingManager.hasEncodedValue(PhotoCoverage.KEY_ONLY_360)) {
+            BooleanEncodedValue hasPhoto = encodingManager.getBooleanEncodedValue(PhotoCoverage.KEY_HAS_PHOTO);
+            BooleanEncodedValue only360 = encodingManager.getBooleanEncodedValue(PhotoCoverage.KEY_ONLY_360);
+            new PhotoCoverageApplier(photoAreaIndex, hasPhoto, only360).apply(baseGraph.getBaseGraph());
+            logger.info("Applied photo coverage flags using {}", photoCoverageFile);
+        } else {
+            if (!isEmpty(photoCoverageFile))
+                logger.warn("Photo coverage file configured but encoded values missing or index empty, skipping");
         }
         DateFormat f = createFormatter();
         properties.put("datareader.import.date", f.format(new Date()));
