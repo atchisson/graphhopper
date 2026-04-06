@@ -10,7 +10,7 @@ RUN python3 -m venv /opt/panoramax-venv
 ENV PATH="/opt/panoramax-venv/bin:${PATH}"
 RUN --mount=type=cache,target=/root/.m2 \
     mvn -B -DskipTests -pl web -am package
-RUN pip install --no-cache-dir pyarrow shapely h3 mapbox-vector-tile
+RUN pip install --no-cache-dir pyarrow shapely h3 tqdm
 
 # Runtime image
 FROM eclipse-temurin:17-jre
@@ -18,7 +18,7 @@ FROM eclipse-temurin:17-jre
 RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates python3 python3-pip python3-venv && rm -rf /var/lib/apt/lists/*
 RUN python3 -m venv /opt/panoramax-venv
 ENV PATH="/opt/panoramax-venv/bin:${PATH}"
-RUN pip install --no-cache-dir pyarrow shapely h3 mapbox-vector-tile
+RUN pip install --no-cache-dir pyarrow shapely h3 tqdm
 
 WORKDIR /graphhopper
 
@@ -29,7 +29,8 @@ COPY tools/panoramax_preprocess.py /usr/local/bin/panoramax_preprocess.py
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh /usr/local/bin/panoramax_preprocess.py
 
-ENV JAVA_OPTS="-Xmx4g" \
+ENV PYTHONUNBUFFERED=1 \
+    JAVA_OPTS="-Xmx4g" \
     OSM_REGION="centre" \
     DATA_DIR="/data" \
     GRAPH_DIR="/data/graph-cache" \

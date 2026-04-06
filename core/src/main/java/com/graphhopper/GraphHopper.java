@@ -898,7 +898,7 @@ public class GraphHopper {
         String photoCoverageFile = ghConfig.getString("photo_coverage.file", "");
         if (!isEmpty(photoCoverageFile)) {
             encodedValuesWithProps.put(PhotoCoverage.KEY_HAS_PHOTO, new PMap());
-            encodedValuesWithProps.put(PhotoCoverage.KEY_ONLY_360, new PMap());
+            encodedValuesWithProps.put(PhotoCoverage.KEY_HAS_360, new PMap());
         }
 
         Map<String, ImportUnit> activeImportUnits = new LinkedHashMap<>();
@@ -989,10 +989,10 @@ public class GraphHopper {
         // apply photo coverage encoded values after graph creation
         if (photoAreaIndex != null && encodingManager != null &&
                 encodingManager.hasEncodedValue(PhotoCoverage.KEY_HAS_PHOTO) &&
-                encodingManager.hasEncodedValue(PhotoCoverage.KEY_ONLY_360)) {
+                encodingManager.hasEncodedValue(PhotoCoverage.KEY_HAS_360)) {
             BooleanEncodedValue hasPhoto = encodingManager.getBooleanEncodedValue(PhotoCoverage.KEY_HAS_PHOTO);
-            BooleanEncodedValue only360 = encodingManager.getBooleanEncodedValue(PhotoCoverage.KEY_ONLY_360);
-            new PhotoCoverageApplier(photoAreaIndex, hasPhoto, only360).apply(baseGraph.getBaseGraph());
+            BooleanEncodedValue has360 = encodingManager.getBooleanEncodedValue(PhotoCoverage.KEY_HAS_360);
+            new PhotoCoverageApplier(photoAreaIndex, hasPhoto, has360).apply(baseGraph.getBaseGraph());
             logger.info("Applied photo coverage flags using {}", photoCoverageFile);
         } else {
             if (!isEmpty(photoCoverageFile))

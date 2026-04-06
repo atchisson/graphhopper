@@ -14,17 +14,17 @@ import java.util.List;
 public class PhotoCoverageApplier {
     private final AreaIndex<CustomArea> areaIndex;
     private final BooleanEncodedValue hasPhoto;
-    private final BooleanEncodedValue only360;
+    private final BooleanEncodedValue has360;
     private final GeometryFactory gf = new GeometryFactory();
 
-    public PhotoCoverageApplier(AreaIndex<CustomArea> areaIndex, BooleanEncodedValue hasPhoto, BooleanEncodedValue only360) {
+    public PhotoCoverageApplier(AreaIndex<CustomArea> areaIndex, BooleanEncodedValue hasPhoto, BooleanEncodedValue has360) {
         this.areaIndex = areaIndex;
         this.hasPhoto = hasPhoto;
-        this.only360 = only360;
+        this.has360 = has360;
     }
 
     public void apply(BaseGraph graph) {
-        if (areaIndex == null || hasPhoto == null || only360 == null) return;
+        if (areaIndex == null || hasPhoto == null || has360 == null) return;
 
         var edges = graph.getAllEdges();
         while (edges.next()) {
@@ -34,16 +34,16 @@ public class PhotoCoverageApplier {
             if (mid == null) continue;
             List<CustomArea> matches = areaIndex.query(mid.getY(), mid.getX());
             boolean photo = false;
-            boolean panoOnly = false;
+            boolean pano360 = false;
             for (CustomArea ca : matches) {
                 Object hasPhotoProp = ca.getProperties().getOrDefault("has_photo", true);
-                Object only360Prop = ca.getProperties().getOrDefault("has_only_360", false);
+                Object has360Prop = ca.getProperties().getOrDefault("has_360", false);
                 photo |= Boolean.parseBoolean(hasPhotoProp.toString());
-                panoOnly |= Boolean.parseBoolean(only360Prop.toString());
+                pano360 |= Boolean.parseBoolean(has360Prop.toString());
             }
             if (photo) {
                 edges.set(hasPhoto, true);
-                edges.set(only360, panoOnly);
+                edges.set(has360, pano360);
             }
         }
     }

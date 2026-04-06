@@ -7,12 +7,7 @@ PHOTO_MODE="${PHOTO_MODE:-any}" # any | only360
 PHOTO_PROVIDERS="${PHOTO_PROVIDERS:-panoramax}"
 PHOTO_WEIGHT="${PHOTO_WEIGHT:-0}"
 PHOTO_COVERAGE_FILE="${PHOTO_COVERAGE_FILE:-/data/panoramax_coverage.geojson}"
-PHOTO_FORCE_DOWNLOAD="${PHOTO_FORCE_DOWNLOAD:-false}"
-PHOTO_SOURCE="${PHOTO_SOURCE:-parquet}" # parquet | mvt
-PHOTO_MVT_ZOOM="${PHOTO_MVT_ZOOM:-13}"
-PHOTO_MVT_URL_TEMPLATE="${PHOTO_MVT_URL_TEMPLATE:-https://explore.panoramax.fr/api/map/{z}/{x}/{y}.mvt}"
 H3_RES="${H3_RES:-12}"
-PHOTO_MVT_FLIPY="${PHOTO_MVT_FLIPY:-true}"
 FORCE_DOWNLOAD="${OSM_FORCE_DOWNLOAD:-false}"
 case "${REGION}" in
   centre|centre-val-de-loire)
@@ -50,7 +45,7 @@ fi
 
 if [ "${PBF_SIZE}" -lt 100000 ]; then
   echo "Downloading OSM extract for ${REGION_SLUG}..."
-  curl -fL --retry 3 --retry-delay 2 --retry-connrefused --progress-bar "${PBF_URL}" -o "${PBF_FILE}"
+  curl -fL --retry 3 --retry-delay 2 --retry-connrefused --progress-bar "${PBF_URL}" -o "${PBF_FILE}" 2>&1 | tr '\r' '\n'
 else
   echo "Reusing existing PBF: ${PBF_FILE}"
 fi
@@ -64,30 +59,15 @@ fi
 
 # Build Panoramax coverage if requested
 if [ "${PHOTO_WEIGHT}" != "0" ] || [ "${PHOTO_MODE}" != "any" ] || [ -n "${PHOTO_PROVIDERS}" ]; then
-  if [ ! -f "${PHOTO_COVERAGE_FILE}" ] || [ "${PHOTO_FORCE_DOWNLOAD}" = "true" ]; then
+  if [ ! -f "${PHOTO_COVERAGE_FILE}" ]; then
     echo "Generating Panoramax coverage grid..."
-    PY_ARGS=(
-      --region "${REGION_SLUG}"
-      --output-geojson "${PHOTO_COVERAGE_FILE}"
-    )
-    if [ "${PHOTO_SOURCE}" = "mvt" ]; then
-      PY_ARGS+=(--source mvt --mvt-zoom "${PHOTO_MVT_ZOOM}" --mvt-url-template "${PHOTO_MVT_URL_TEMPLATE}")
-      if [ "${PHOTO_MVT_FLIPY}" = "true" ]; then
-        PY_ARGS+=(--mvt-flip-y)
-      fi
-    else
-      PY_ARGS+=(--source parquet --parquet-path "${PARQUET_PATH}")
-      if [ "${PHOTO_FORCE_DOWNLOAD}" = "true" ]; then
-        PY_ARGS+=(--force-download)
-      fi
-    fi
-    PY_ARGS+=(--h3-res "${H3_RES:-12}")
-    python3 /usr/local/bin/panoramax_preprocess.py "${PY_ARGS[@]}"
+    python3 /usr/local/bin/panoramax_preprocess.py \
+      --region "${REGION_SLUG}" \
+      --output-geojson "${PHOTO_COVERAGE_FILE}" \
+      --parquet-path "${PARQUET_PATH}" \
+      --h3-res "${H3_RES}"
   else
     echo "Reusing existing Panoramax coverage: ${PHOTO_COVERAGE_FILE}"
-  fi
-  if [ ! -f "${PHOTO_COVERAGE_FILE}" ]; then
-    echo "Coverage file missing after preprocess, continuing without photo avoidance." >&2
   fi
 fi
 

@@ -16,6 +16,8 @@ const config = {
             'road_environment',
             'max_speed',
             'average_speed',
+            'photo_coverage',
+            'photo_coverage_only360',
         ],
         snapPreventions: ['ferry'],
     },
