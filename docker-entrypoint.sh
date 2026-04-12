@@ -6,7 +6,7 @@ REGION="${OSM_REGION:-centre}"
 PHOTO_MODE="${PHOTO_MODE:-any}" # any | only360
 PHOTO_PROVIDERS="${PHOTO_PROVIDERS:-panoramax}"
 PHOTO_WEIGHT="${PHOTO_WEIGHT:-0}"
-PHOTO_COVERAGE_FILE="${PHOTO_COVERAGE_FILE:-/data/panoramax_coverage.geojson}"
+PHOTO_COVERAGE_FILE="${PHOTO_COVERAGE_FILE:-/data/panoramax_coverage.bin}"
 H3_RES="${H3_RES:-12}"
 FORCE_DOWNLOAD="${OSM_FORCE_DOWNLOAD:-false}"
 case "${REGION}" in
@@ -63,7 +63,7 @@ if [ "${PHOTO_WEIGHT}" != "0" ] || [ "${PHOTO_MODE}" != "any" ] || [ -n "${PHOTO
     echo "Generating Panoramax coverage grid..."
     python3 /usr/local/bin/panoramax_preprocess.py \
       --region "${REGION_SLUG}" \
-      --output-geojson "${PHOTO_COVERAGE_FILE}" \
+      --output "${PHOTO_COVERAGE_FILE}" \
       --parquet-path "${PARQUET_PATH}" \
       --h3-res "${H3_RES}"
   else

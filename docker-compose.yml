@@ -3,8 +3,8 @@ services:
     build: .
     container_name: graphhopper
     environment:
-      - OSM_REGION=${OSM_REGION:-centre}
-      - JAVA_OPTS=${JAVA_OPTS:--Xmx4g}
+      - OSM_REGION=${OSM_REGION:-france}
+      - JAVA_OPTS=${JAVA_OPTS:--Xmx16g}
       - DATA_DIR=/data
       - GRAPH_DIR=/data/graph-cache
       - PHOTO_WEIGHT=${PHOTO_WEIGHT:-0}

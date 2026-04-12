@@ -246,8 +246,8 @@ graphhopper:
 
   #### Photo coverage avoidance ####
 
-  # Optional GeoJSON produced by tools/panoramax_preprocess.py
-  photo_coverage.file: data/panoramax_coverage.geojson
+  # Optional binary index produced by tools/panoramax_preprocess.py
+  photo_coverage.file: data/panoramax_coverage.bin
   # any: pénalise toute couverture ; only360 : pénalise uniquement si toutes les photos de la cellule sont 360°
   photo_coverage.mode: any
   # 0 désactive la pénalité ; valeur positive = poids appliqué par le custom model généré côté serveur

@@ -1,25 +1,26 @@
 #!/usr/bin/env python3
 """
-Builds a lightweight coverage grid from the Panoramax GeoParquet.
-Outputs a GeoJSON of H3 cells with aggregated counts (all photos vs 360-only).
+Builds a lightweight coverage index from the Panoramax GeoParquet.
+Outputs a compact binary file (.bin) of H3 cell IDs consumed by GraphHopper
+to flag edges that already have street-level photo coverage.
 Designed to run in the container entrypoint before GraphHopper starts.
 """
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import resource
+import struct
 import sys
 import time
 from concurrent.futures import ProcessPoolExecutor, FIRST_COMPLETED, wait
 from pathlib import Path
-from typing import Dict, Iterable, List, Tuple
+from typing import Dict, List, Tuple
+
+import numpy as np
 
 import h3
 import pyarrow.parquet as pq
-from shapely import wkb
-from shapely.geometry import Point, Polygon, mapping
 
 # Rough bounding boxes to clip early.
 # Format: (minLon, minLat, maxLon, maxLat),
@@ -39,34 +40,6 @@ def detect_columns(schema) -> Tuple[str | None, str | None, str | None]:
         None,
     )
     return lon, lat, geom
-
-
-def iter_points(table, lon_col, lat_col, geom_col) -> Iterable[Tuple[float, float]]:
-    if lon_col and lat_col:
-        lon_arr = table.column(lon_col)
-        lat_arr = table.column(lat_col)
-        for lo, la in zip(
-            lon_arr.to_numpy(zero_copy_only=False),
-            lat_arr.to_numpy(zero_copy_only=False),
-        ):
-            if lo is None or la is None:
-                continue
-            yield float(lo), float(la)
-    elif geom_col:
-        geom_arr = table.column(geom_col)
-        for val in geom_arr:
-            if val is None:
-                continue
-            try:
-                geom = wkb.loads(bytes(val))
-            except Exception:
-                continue
-            if geom.is_empty:
-                continue
-            pt = geom.centroid if not isinstance(geom, Point) else geom
-            yield pt.x, pt.y
-    else:
-        return
 
 
 def is_360_photo(orient_value) -> bool:
@@ -94,7 +67,9 @@ def _needed_columns(lon_col, lat_col, geom_col, has_orient_col) -> List[str]:
 
 def _process_row_group(args: Tuple) -> Dict[str, Dict[str, int]]:
     """Worker: process a single parquet row group and return partial counts."""
-    parquet_path, rg_idx, lon_col, lat_col, geom_col, has_orient_col, bbox, h3_res = args
+    parquet_path, rg_idx, lon_col, lat_col, geom_col, has_orient_col, bbox, h3_res = (
+        args
+    )
     lon_min, lat_min, lon_max, lat_max = bbox
 
     columns = _needed_columns(lon_col, lat_col, geom_col, has_orient_col)
@@ -104,14 +79,44 @@ def _process_row_group(args: Tuple) -> Dict[str, Dict[str, int]]:
     counts: Dict[str, Dict[str, int]] = {}
     orient_col = table.column("pers:interior_orientation") if has_orient_col else None
 
-    for idx, (lon, lat) in enumerate(iter_points(table, lon_col, lat_col, geom_col)):
-        if not (lon_min <= lon <= lon_max and lat_min <= lat <= lat_max):
-            continue
-        cell = h3.latlng_to_cell(lat, lon, h3_res)
-        entry = counts.setdefault(cell, {"photo_count": 0, "pano360_count": 0})
-        entry["photo_count"] += 1
-        if orient_col is not None and is_360_photo(orient_col[idx]):
-            entry["pano360_count"] += 1
+    if lon_col and lat_col:
+        lon_arr = table.column(lon_col).to_numpy(zero_copy_only=False)
+        lat_arr = table.column(lat_col).to_numpy(zero_copy_only=False)
+        for row_idx, (lo, la) in enumerate(zip(lon_arr, lat_arr)):
+            # to_numpy() encodes nulls as nan — skip them explicitly
+            if lo != lo or la != la:
+                continue
+            lo, la = float(lo), float(la)
+            if not (lon_min <= lo <= lon_max and lat_min <= la <= lat_max):
+                continue
+            cell = h3.latlng_to_cell(la, lo, h3_res)
+            entry = counts.setdefault(cell, {"photo_count": 0, "pano360_count": 0})
+            entry["photo_count"] += 1
+            if orient_col is not None and is_360_photo(orient_col[row_idx]):
+                entry["pano360_count"] += 1
+    elif geom_col:
+        from shapely import wkb
+        from shapely.geometry import Point
+
+        geom_arr = table.column(geom_col)
+        for row_idx, val in enumerate(geom_arr):
+            if val is None:
+                continue
+            try:
+                geom = wkb.loads(bytes(val))
+            except Exception:
+                continue
+            if geom.is_empty:
+                continue
+            pt = geom.centroid if not isinstance(geom, Point) else geom
+            lo, la = pt.x, pt.y
+            if not (lon_min <= lo <= lon_max and lat_min <= la <= lat_max):
+                continue
+            cell = h3.latlng_to_cell(la, lo, h3_res)
+            entry = counts.setdefault(cell, {"photo_count": 0, "pano360_count": 0})
+            entry["photo_count"] += 1
+            if orient_col is not None and is_360_photo(orient_col[row_idx]):
+                entry["pano360_count"] += 1
 
     return counts
 
@@ -129,7 +134,9 @@ def aggregate(
     bbox = _validate_bbox(bbox)
     parquet = pq.ParquetFile(parquet_path)
     lon_col, lat_col, geom_col = detect_columns(parquet.schema_arrow)
-    has_orient_col = "pers:interior_orientation" in [f.name for f in parquet.schema_arrow]
+    has_orient_col = "pers:interior_orientation" in [
+        f.name for f in parquet.schema_arrow
+    ]
 
     num_row_groups = parquet.num_row_groups
     n_workers = min(os.cpu_count() or 4, num_row_groups)
@@ -141,7 +148,16 @@ def aggregate(
     report_every = max(1, num_row_groups // 20)
 
     def make_args(rg):
-        return (str(parquet_path), rg, lon_col, lat_col, geom_col, has_orient_col, bbox, h3_res)
+        return (
+            str(parquet_path),
+            rg,
+            lon_col,
+            lat_col,
+            geom_col,
+            has_orient_col,
+            bbox,
+            h3_res,
+        )
 
     t_start = time.monotonic()
 
@@ -164,7 +180,8 @@ def aggregate(
                     pct = completed * 100 // num_row_groups
                     print(
                         f"Processing parquet: {completed}/{num_row_groups} row groups ({pct}%)",
-                        file=sys.stderr, flush=True,
+                        file=sys.stderr,
+                        flush=True,
                     )
                 # Submit next row group as slot freed
                 rg = next(rg_iter, None)
@@ -175,43 +192,71 @@ def aggregate(
     ram_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss // 1024
     print(
         f"Parquet processed in {elapsed:.1f}s — peak RAM: {ram_mb} MB",
-        file=sys.stderr, flush=True,
+        file=sys.stderr,
+        flush=True,
     )
 
     return merged
 
 
-def _validate_bbox(bbox: Tuple[float, float, float, float]) -> Tuple[float, float, float, float]:
+def _validate_bbox(
+    bbox: Tuple[float, float, float, float],
+) -> Tuple[float, float, float, float]:
     lon_min, lat_min, lon_max, lat_max = bbox
-    if not (-180 <= lon_min <= 180 and -180 <= lon_max <= 180 and -90 <= lat_min <= 90 and -90 <= lat_max <= 90):
+    if not (
+        -180 <= lon_min <= 180
+        and -180 <= lon_max <= 180
+        and -90 <= lat_min <= 90
+        and -90 <= lat_max <= 90
+    ):
         raise ValueError(f"bbox out of bounds: {bbox}")
     if lon_min >= lon_max or lat_min >= lat_max:
         raise ValueError(f"bbox malformed (min >= max): {bbox}")
     return bbox
 
 
-def build_geojson(counts: Dict[str, Dict[str, int]], out_path: Path) -> None:
-    features = []
-    for cell, agg in counts.items():
-        boundary = [(lng, lat) for lat, lng in h3.cell_to_boundary(cell)]
-        poly = Polygon(boundary)
-        features.append(
-            {
-                "type": "Feature",
-                "geometry": mapping(poly),
-                "properties": {
-                    "id": cell,
-                    "h3": cell,
-                    "photo_count": agg["photo_count"],
-                    "pano360_count": agg["pano360_count"],
-                    "has_photo": agg["photo_count"] > 0,
-                    "has_360": agg["pano360_count"] > 0,
-                },
-            }
-        )
-    collection = {"type": "FeatureCollection", "features": features}
+def build_coverage_binary(
+    counts: Dict[str, Dict[str, int]], out_path: Path, h3_res: int
+) -> None:
+    """Write a compact binary index consumed by GraphHopper's PhotoCoverageLoader.
+
+    Format (big-endian):
+      4 bytes  magic "PCB1"
+      4 bytes  h3_resolution (int32)
+      8 bytes  n_photo (int64)
+      8 bytes  n_360   (int64)
+      n_photo * 8 bytes  photo cell IDs (int64)
+      n_360   * 8 bytes  360° cell IDs  (int64)
+    """
+    t_start = time.monotonic()
+
+    # H3 cell strings are hex representations of 64-bit integers (MSB always 0)
+    photo_cells = np.array(
+        [int(c, 16) for c, v in counts.items() if v["photo_count"] > 0],
+        dtype=">i8",
+    )
+    cells_360 = np.array(
+        [int(c, 16) for c, v in counts.items() if v["pano360_count"] > 0],
+        dtype=">i8",
+    )
+
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(json.dumps(collection), encoding="utf-8")
+    with out_path.open("wb") as f:
+        f.write(b"PCB1")
+        f.write(struct.pack(">i", h3_res))
+        f.write(struct.pack(">q", len(photo_cells)))
+        f.write(struct.pack(">q", len(cells_360)))
+        f.write(photo_cells.tobytes())
+        f.write(cells_360.tobytes())
+
+    elapsed = time.monotonic() - t_start
+    ram_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss // 1024
+    size_mb = out_path.stat().st_size // (1024 * 1024)
+    print(
+        f"Coverage binary written in {elapsed:.1f}s — {size_mb} MB — peak RAM: {ram_mb} MB",
+        file=sys.stderr,
+        flush=True,
+    )
 
 
 def main():
@@ -219,7 +264,7 @@ def main():
     parser.add_argument(
         "--region", default="centre", help="centre | france (bbox clipping)"
     )
-    parser.add_argument("--output-geojson", default="/data/panoramax_coverage.geojson")
+    parser.add_argument("--output", default="/data/panoramax_coverage.bin")
     parser.add_argument("--parquet-path", default="/data/panoramax.parquet")
     parser.add_argument(
         "--h3-res", type=int, default=12, help="H3 resolution (default 12)"
@@ -238,15 +283,19 @@ def main():
 
     region_key = args.region.lower()
     bbox = REGION_BBOX.get(region_key, REGION_BBOX["france"])
-    output_geojson = Path(args.output_geojson)
+    output_path = Path(args.output)
 
     counts = aggregate(parquet_path, bbox, args.h3_res)
 
     if not counts:
         print("No coverage extracted; leaving output untouched", file=sys.stderr)
         sys.exit(0)
-    build_geojson(counts, output_geojson)
-    print(f"Wrote coverage to {output_geojson} ({len(counts)} cells)", file=sys.stderr)
+    print(
+        f"Aggregated coverage for {len(counts)} cells, building binary index...",
+        file=sys.stderr,
+    )
+    build_coverage_binary(counts, output_path, args.h3_res)
+    print(f"Wrote coverage to {output_path} ({len(counts)} cells)", file=sys.stderr)
 
 
 if __name__ == "__main__":

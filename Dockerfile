@@ -30,8 +30,8 @@ COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh /usr/local/bin/panoramax_preprocess.py
 
 ENV PYTHONUNBUFFERED=1 \
-    JAVA_OPTS="-Xmx4g" \
-    OSM_REGION="centre" \
+    JAVA_OPTS="-Xmx14g" \
+    OSM_REGION="france" \
     DATA_DIR="/data" \
     GRAPH_DIR="/data/graph-cache" \
     CUSTOM_MODELS_DIR="/graphhopper/custom_models"

@@ -28,6 +28,7 @@ import com.graphhopper.config.LMProfile;
 import com.graphhopper.config.Profile;
 import com.graphhopper.jackson.Jackson;
 import com.graphhopper.reader.PhotoCoverageApplier;
+import com.graphhopper.reader.PhotoCoverageData;
 import com.graphhopper.reader.PhotoCoverageLoader;
 import com.graphhopper.reader.dem.*;
 import com.graphhopper.reader.osm.OSMReader;
@@ -966,10 +967,9 @@ public class GraphHopper {
 
         AreaIndex<CustomArea> areaIndex = new AreaIndex<>(customAreas);
 
-        // photo coverage areas (optional)
+        // photo coverage index (optional)
         String photoCoverageFile = ghConfig.getString("photo_coverage.file", "");
-        List<CustomArea> photoAreas = isEmpty(photoCoverageFile) ? List.of() : PhotoCoverageLoader.load(Paths.get(photoCoverageFile));
-        AreaIndex<CustomArea> photoAreaIndex = photoAreas.isEmpty() ? null : new AreaIndex<>(photoAreas);
+        PhotoCoverageData photoCoverageData = isEmpty(photoCoverageFile) ? null : PhotoCoverageLoader.load(Paths.get(photoCoverageFile));
 
         eleProvider.init();
         logger.info("start creating graph from " + osmFile);
@@ -987,12 +987,12 @@ public class GraphHopper {
         }
 
         // apply photo coverage encoded values after graph creation
-        if (photoAreaIndex != null && encodingManager != null &&
+        if (photoCoverageData != null && encodingManager != null &&
                 encodingManager.hasEncodedValue(PhotoCoverage.KEY_HAS_PHOTO) &&
                 encodingManager.hasEncodedValue(PhotoCoverage.KEY_HAS_360)) {
             BooleanEncodedValue hasPhoto = encodingManager.getBooleanEncodedValue(PhotoCoverage.KEY_HAS_PHOTO);
             BooleanEncodedValue has360 = encodingManager.getBooleanEncodedValue(PhotoCoverage.KEY_HAS_360);
-            new PhotoCoverageApplier(photoAreaIndex, hasPhoto, has360).apply(baseGraph.getBaseGraph());
+            new PhotoCoverageApplier(photoCoverageData, hasPhoto, has360).apply(baseGraph.getBaseGraph());
             logger.info("Applied photo coverage flags using {}", photoCoverageFile);
         } else {
             if (!isEmpty(photoCoverageFile))
