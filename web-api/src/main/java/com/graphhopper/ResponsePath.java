@@ -37,6 +37,7 @@ public class ResponsePath {
     private double distance;
     private double ascend;
     private double descend;
+    private double uncoveredDistance = -1;
     private double routeWeight;
     private long time;
     private String debugInfo = "";
@@ -188,6 +189,16 @@ public class ResponsePath {
             throw new IllegalStateException("descend has to be positive but was " + descend);
 
         this.descend = descend;
+        return this;
+    }
+
+    /** @return uncovered distance in meters, or -1 if photo_coverage data is unavailable */
+    public double getUncoveredDistance() {
+        return uncoveredDistance;
+    }
+
+    public ResponsePath setUncoveredDistance(double uncoveredDistance) {
+        this.uncoveredDistance = uncoveredDistance;
         return this;
     }
 

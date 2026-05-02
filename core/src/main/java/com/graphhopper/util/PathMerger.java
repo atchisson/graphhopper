@@ -20,7 +20,9 @@ package com.graphhopper.util;
 import com.graphhopper.ResponsePath;
 import com.graphhopper.routing.InstructionsFromEdges;
 import com.graphhopper.routing.Path;
+import com.graphhopper.routing.ev.BooleanEncodedValue;
 import com.graphhopper.routing.ev.EncodedValueLookup;
+import com.graphhopper.routing.ev.PhotoCoverage;
 import com.graphhopper.routing.weighting.Weighting;
 import com.graphhopper.storage.Graph;
 import com.graphhopper.util.details.PathDetailsBuilderFactory;
@@ -154,6 +156,25 @@ public class PathMerger {
 
         if (!fullPoints.isEmpty() && fullPoints.is3D)
             calcAscendDescend(responsePath, fullPoints);
+
+        if (evLookup.hasEncodedValue(PhotoCoverage.KEY_HAS_PHOTO)) {
+            BooleanEncodedValue photoCoverageEnc = evLookup.getBooleanEncodedValue(PhotoCoverage.KEY_HAS_PHOTO);
+            double[] uncoveredMeters = {0};
+            for (Path path : paths) {
+                if (path.isFound()) {
+                    path.forEveryEdge(new Path.EdgeVisitor() {
+                        @Override
+                        public void next(EdgeIteratorState edge, int index, int prevEdgeId) {
+                            if (!edge.get(photoCoverageEnc))
+                                uncoveredMeters[0] += edge.getDistance();
+                        }
+                        @Override
+                        public void finish() {}
+                    });
+                }
+            }
+            responsePath.setUncoveredDistance(uncoveredMeters[0]);
+        }
 
         if (enableInstructions) {
             fullInstructions = updateInstructionsWithContext(fullInstructions);

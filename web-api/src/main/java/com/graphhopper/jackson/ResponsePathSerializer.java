@@ -114,6 +114,8 @@ public class ResponsePathSerializer {
                 jsonPath.putPOJO("details", p.getPathDetails());
                 jsonPath.put("ascend", p.getAscend());
                 jsonPath.put("descend", p.getDescend());
+                if (p.getUncoveredDistance() >= 0)
+                    jsonPath.put("uncovered_distance", Helper.round(p.getUncoveredDistance(), 3));
             }
             jsonPath.putPOJO("snapped_waypoints", pointsEncoded ? encodePolyline(p.getWaypoints(), enableElevation, pointsMultiplier) : p.getWaypoints().toLineString(enableElevation));
             if (p.getFare() != null) {
