@@ -900,6 +900,8 @@ public class GraphHopper {
         if (!isEmpty(photoCoverageFile)) {
             encodedValuesWithProps.put(PhotoCoverage.KEY_HAS_PHOTO, new PMap());
             encodedValuesWithProps.put(PhotoCoverage.KEY_HAS_360, new PMap());
+            encodedValuesWithProps.put(PhotoCoverage.KEY_DATE_MIN, new PMap());
+            encodedValuesWithProps.put(PhotoCoverage.KEY_DATE_MAX, new PMap());
         }
 
         Map<String, ImportUnit> activeImportUnits = new LinkedHashMap<>();
@@ -992,8 +994,30 @@ public class GraphHopper {
                 encodingManager.hasEncodedValue(PhotoCoverage.KEY_HAS_360)) {
             BooleanEncodedValue hasPhoto = encodingManager.getBooleanEncodedValue(PhotoCoverage.KEY_HAS_PHOTO);
             BooleanEncodedValue has360 = encodingManager.getBooleanEncodedValue(PhotoCoverage.KEY_HAS_360);
-            new PhotoCoverageApplier(photoCoverageData, hasPhoto, has360).apply(baseGraph.getBaseGraph());
+            com.graphhopper.routing.ev.IntEncodedValue dateMinEV = encodingManager.hasEncodedValue(PhotoCoverage.KEY_DATE_MIN)
+                    ? encodingManager.getIntEncodedValue(PhotoCoverage.KEY_DATE_MIN) : null;
+            com.graphhopper.routing.ev.IntEncodedValue dateMaxEV = encodingManager.hasEncodedValue(PhotoCoverage.KEY_DATE_MAX)
+                    ? encodingManager.getIntEncodedValue(PhotoCoverage.KEY_DATE_MAX) : null;
+            new PhotoCoverageApplier(photoCoverageData, hasPhoto, has360, dateMinEV, dateMaxEV).apply(baseGraph.getBaseGraph());
             logger.info("Applied photo coverage flags using {}", photoCoverageFile);
+            try {
+                String base = Paths.get(photoCoverageFile).getFileName().toString().replaceAll("\\.[^.]+$", "");
+                java.nio.file.Path dir = Paths.get(photoCoverageFile).toAbsolutePath().getParent();
+                java.nio.file.Path datePath = dir.resolve(base + ".date");
+                java.nio.file.Path dateMinPath = dir.resolve(base + ".date_min");
+                if (Files.exists(datePath)) {
+                    String coverageDate = new String(Files.readAllBytes(datePath)).trim();
+                    properties.put("photo_coverage.date", coverageDate);
+                    logger.info("Photo coverage date (max): {}", coverageDate);
+                }
+                if (Files.exists(dateMinPath)) {
+                    String coverageDateMin = new String(Files.readAllBytes(dateMinPath)).trim();
+                    properties.put("photo_coverage.date_min", coverageDateMin);
+                    logger.info("Photo coverage date (min): {}", coverageDateMin);
+                }
+            } catch (Exception e) {
+                logger.warn("Could not read photo coverage date sidecar files: {}", e.getMessage());
+            }
         } else {
             if (!isEmpty(photoCoverageFile))
                 logger.warn("Photo coverage file configured but encoded values missing or index empty, skipping");

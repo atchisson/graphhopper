@@ -8,6 +8,7 @@ Designed to run in the container entrypoint before GraphHopper starts.
 from __future__ import annotations
 
 import argparse
+import datetime
 import os
 import resource
 import struct
@@ -15,12 +16,25 @@ import sys
 import time
 from concurrent.futures import ProcessPoolExecutor, FIRST_COMPLETED, wait
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
 import h3
 import pyarrow.parquet as pq
+
+_EPOCH = datetime.date(1970, 1, 1)
+
+
+def _days_since_epoch(dt_value) -> Optional[int]:
+    """Return days since 1970-01-01 from a datetime-like value, or None."""
+    if dt_value is None:
+        return None
+    try:
+        d = dt_value.date() if hasattr(dt_value, "date") else dt_value
+        return (d - _EPOCH).days
+    except Exception:
+        return None
 
 # Rough bounding boxes to clip early.
 # Format: (minLon, minLat, maxLon, maxLat),
@@ -53,7 +67,7 @@ def is_360_photo(orient_value) -> bool:
         return False
 
 
-def _needed_columns(lon_col, lat_col, geom_col, has_orient_col) -> List[str]:
+def _needed_columns(lon_col, lat_col, geom_col, has_orient_col, has_datetime_col) -> List[str]:
     """Return only the parquet columns required for processing."""
     cols = []
     if lon_col and lat_col:
@@ -62,22 +76,38 @@ def _needed_columns(lon_col, lat_col, geom_col, has_orient_col) -> List[str]:
         cols.append(geom_col)
     if has_orient_col:
         cols.append("pers:interior_orientation")
+    if has_datetime_col:
+        cols.append("datetime")
     return cols or None  # None = load all (fallback)
 
 
-def _process_row_group(args: Tuple) -> Dict[str, Dict[str, int]]:
+def _process_row_group(args: Tuple) -> Dict[str, Dict]:
     """Worker: process a single parquet row group and return partial counts."""
-    parquet_path, rg_idx, lon_col, lat_col, geom_col, has_orient_col, bbox, h3_res = (
+    parquet_path, rg_idx, lon_col, lat_col, geom_col, has_orient_col, has_datetime_col, bbox, h3_res = (
         args
     )
     lon_min, lat_min, lon_max, lat_max = bbox
 
-    columns = _needed_columns(lon_col, lat_col, geom_col, has_orient_col)
+    columns = _needed_columns(lon_col, lat_col, geom_col, has_orient_col, has_datetime_col)
     parquet = pq.ParquetFile(parquet_path)
     table = parquet.read_row_group(rg_idx, columns=columns)
 
-    counts: Dict[str, Dict[str, int]] = {}
+    counts: Dict[str, Dict] = {}
     orient_col = table.column("pers:interior_orientation") if has_orient_col else None
+    dt_col = table.column("datetime") if has_datetime_col and "datetime" in table.schema.names else None
+
+    def _update_entry(cell, row_idx):
+        entry = counts.setdefault(cell, {"photo_count": 0, "pano360_count": 0, "min_date": None, "max_date": None})
+        entry["photo_count"] += 1
+        if orient_col is not None and is_360_photo(orient_col[row_idx]):
+            entry["pano360_count"] += 1
+        if dt_col is not None:
+            days = _days_since_epoch(dt_col[row_idx].as_py())
+            if days is not None:
+                if entry["min_date"] is None or days < entry["min_date"]:
+                    entry["min_date"] = days
+                if entry["max_date"] is None or days > entry["max_date"]:
+                    entry["max_date"] = days
 
     if lon_col and lat_col:
         lon_arr = table.column(lon_col).to_numpy(zero_copy_only=False)
@@ -90,10 +120,7 @@ def _process_row_group(args: Tuple) -> Dict[str, Dict[str, int]]:
             if not (lon_min <= lo <= lon_max and lat_min <= la <= lat_max):
                 continue
             cell = h3.latlng_to_cell(la, lo, h3_res)
-            entry = counts.setdefault(cell, {"photo_count": 0, "pano360_count": 0})
-            entry["photo_count"] += 1
-            if orient_col is not None and is_360_photo(orient_col[row_idx]):
-                entry["pano360_count"] += 1
+            _update_entry(cell, row_idx)
     elif geom_col:
         from shapely import wkb
         from shapely.geometry import Point
@@ -113,19 +140,24 @@ def _process_row_group(args: Tuple) -> Dict[str, Dict[str, int]]:
             if not (lon_min <= lo <= lon_max and lat_min <= la <= lat_max):
                 continue
             cell = h3.latlng_to_cell(la, lo, h3_res)
-            entry = counts.setdefault(cell, {"photo_count": 0, "pano360_count": 0})
-            entry["photo_count"] += 1
-            if orient_col is not None and is_360_photo(orient_col[row_idx]):
-                entry["pano360_count"] += 1
+            _update_entry(cell, row_idx)
 
     return counts
 
 
 def _merge(merged: Dict, partial: Dict) -> None:
     for cell, agg in partial.items():
-        entry = merged.setdefault(cell, {"photo_count": 0, "pano360_count": 0})
+        entry = merged.setdefault(cell, {"photo_count": 0, "pano360_count": 0, "min_date": None, "max_date": None})
         entry["photo_count"] += agg["photo_count"]
         entry["pano360_count"] += agg["pano360_count"]
+        agg_min = agg.get("min_date")
+        agg_max = agg.get("max_date")
+        if agg_min is not None:
+            if entry["min_date"] is None or agg_min < entry["min_date"]:
+                entry["min_date"] = agg_min
+        if agg_max is not None:
+            if entry["max_date"] is None or agg_max > entry["max_date"]:
+                entry["max_date"] = agg_max
 
 
 def aggregate(
@@ -134,16 +166,16 @@ def aggregate(
     bbox = _validate_bbox(bbox)
     parquet = pq.ParquetFile(parquet_path)
     lon_col, lat_col, geom_col = detect_columns(parquet.schema_arrow)
-    has_orient_col = "pers:interior_orientation" in [
-        f.name for f in parquet.schema_arrow
-    ]
+    schema_names = [f.name for f in parquet.schema_arrow]
+    has_orient_col = "pers:interior_orientation" in schema_names
+    has_datetime_col = "datetime" in schema_names
 
     num_row_groups = parquet.num_row_groups
     n_workers = min(os.cpu_count() or 4, num_row_groups)
     # At most 2× workers pending at once: limits buffered results in RAM
     max_pending = n_workers * 2
 
-    merged: Dict[str, Dict[str, int]] = {}
+    merged: Dict[str, Dict] = {}
     completed = 0
     report_every = max(1, num_row_groups // 20)
 
@@ -155,6 +187,7 @@ def aggregate(
             lat_col,
             geom_col,
             has_orient_col,
+            has_datetime_col,
             bbox,
             h3_res,
         )
@@ -215,39 +248,72 @@ def _validate_bbox(
     return bbox
 
 
+def read_max_datetime(parquet_path: Path) -> str | None:
+    """Return the max datetime found in parquet row-group statistics (ISO date, no full scan)."""
+    try:
+        meta = pq.read_metadata(parquet_path)
+        schema = meta.schema.to_arrow_schema()
+        col_names = [schema.field(i).name for i in range(len(schema))]
+        if "datetime" not in col_names:
+            return None
+        col_idx = col_names.index("datetime")
+        max_dt = None
+        for rg in range(meta.num_row_groups):
+            stats = meta.row_group(rg).column(col_idx).statistics
+            if stats is not None and stats.has_min_max and stats.max is not None:
+                if max_dt is None or stats.max > max_dt:
+                    max_dt = stats.max
+        if max_dt is None:
+            return None
+        # stats.max is a datetime-like or timestamp int depending on pyarrow version
+        if hasattr(max_dt, "strftime"):
+            return max_dt.strftime("%Y-%m-%d")
+        # fallback: convert from microseconds epoch
+        import datetime
+        dt = datetime.datetime.utcfromtimestamp(int(max_dt) / 1_000_000)
+        return dt.strftime("%Y-%m-%d")
+    except Exception as e:
+        print(f"WARNING: could not read max datetime from parquet: {e}", file=sys.stderr)
+        return None
+
+
 def build_coverage_binary(
-    counts: Dict[str, Dict[str, int]], out_path: Path, h3_res: int
+    counts: Dict[str, Dict], out_path: Path, h3_res: int
 ) -> None:
-    """Write a compact binary index consumed by GraphHopper's PhotoCoverageLoader.
+    """Write a PCB2 binary index consumed by GraphHopper's PhotoCoverageLoader.
 
     Format (big-endian):
-      4 bytes  magic "PCB1"
+      4 bytes  magic "PCB2"
       4 bytes  h3_resolution (int32)
-      8 bytes  n_photo (int64)
-      8 bytes  n_360   (int64)
-      n_photo * 8 bytes  photo cell IDs (int64)
-      n_360   * 8 bytes  360° cell IDs  (int64)
+      8 bytes  n_cells (int64)
+      n_cells * 24 bytes per cell:
+        8 bytes  cell_id      (int64)
+        4 bytes  min_date     (int32, days since 1970-01-01; 0 = unknown)
+        4 bytes  max_date     (int32, days since 1970-01-01; 0 = unknown)
+        4 bytes  photo_count  (int32)
+        4 bytes  pano360_count(int32)
     """
     t_start = time.monotonic()
 
-    # H3 cell strings are hex representations of 64-bit integers (MSB always 0)
-    photo_cells = np.array(
-        [int(c, 16) for c, v in counts.items() if v["photo_count"] > 0],
-        dtype=">i8",
-    )
-    cells_360 = np.array(
-        [int(c, 16) for c, v in counts.items() if v["pano360_count"] > 0],
-        dtype=">i8",
-    )
+    records = [
+        (
+            int(c, 16),
+            v.get("min_date") or 0,
+            v.get("max_date") or 0,
+            v["photo_count"],
+            v["pano360_count"],
+        )
+        for c, v in counts.items()
+        if v["photo_count"] > 0
+    ]
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with out_path.open("wb") as f:
-        f.write(b"PCB1")
+        f.write(b"PCB2")
         f.write(struct.pack(">i", h3_res))
-        f.write(struct.pack(">q", len(photo_cells)))
-        f.write(struct.pack(">q", len(cells_360)))
-        f.write(photo_cells.tobytes())
-        f.write(cells_360.tobytes())
+        f.write(struct.pack(">q", len(records)))
+        for cell_id, min_d, max_d, photo_cnt, pano360_cnt in records:
+            f.write(struct.pack(">qiiii", cell_id, min_d, max_d, photo_cnt, pano360_cnt))
 
     elapsed = time.monotonic() - t_start
     ram_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss // 1024
@@ -285,6 +351,12 @@ def main():
     bbox = REGION_BBOX.get(region_key, REGION_BBOX["france"])
     output_path = Path(args.output)
 
+    max_dt = read_max_datetime(parquet_path)
+    if max_dt:
+        print(f"Parquet max datetime: {max_dt}", file=sys.stderr)
+    else:
+        print("WARNING: could not determine parquet max datetime", file=sys.stderr)
+
     counts = aggregate(parquet_path, bbox, args.h3_res)
 
     if not counts:
@@ -296,6 +368,20 @@ def main():
     )
     build_coverage_binary(counts, output_path, args.h3_res)
     print(f"Wrote coverage to {output_path} ({len(counts)} cells)", file=sys.stderr)
+
+    if max_dt:
+        date_path = output_path.with_suffix(".date")
+        date_path.write_text(max_dt)
+        print(f"Wrote coverage date to {date_path}", file=sys.stderr)
+
+    # Write min date sidecar from the processed cell data
+    all_min_dates = [v["min_date"] for v in counts.values() if v.get("min_date")]
+    if all_min_dates:
+        min_days = min(all_min_dates)
+        min_dt_str = (_EPOCH + datetime.timedelta(days=min_days)).isoformat()
+        date_min_path = output_path.with_suffix(".date_min")
+        date_min_path.write_text(min_dt_str)
+        print(f"Wrote coverage min date to {date_min_path} ({min_dt_str})", file=sys.stderr)
 
 
 if __name__ == "__main__":

@@ -34,6 +34,10 @@ public class DefaultImportRegistry implements ImportRegistry {
             return ImportUnit.create(name, props -> PhotoCoverage.createHasPhoto(), null);
         else if (PhotoCoverage.KEY_HAS_360.equals(name))
             return ImportUnit.create(name, props -> PhotoCoverage.createHas360(), null);
+        else if (PhotoCoverage.KEY_DATE_MIN.equals(name))
+            return ImportUnit.create(name, props -> PhotoCoverage.createDateMin(), null);
+        else if (PhotoCoverage.KEY_DATE_MAX.equals(name))
+            return ImportUnit.create(name, props -> PhotoCoverage.createDateMax(), null);
         else if (GetOffBike.KEY.equals(name))
             return ImportUnit.create(name, props -> GetOffBike.create(),
                     (lookup, pros) -> new OSMGetOffBikeParser(
