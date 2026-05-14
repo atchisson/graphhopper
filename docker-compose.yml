@@ -7,7 +7,6 @@ services:
       - JAVA_OPTS=${JAVA_OPTS:--Xmx16g}
       - DATA_DIR=/data
       - GRAPH_DIR=/data/graph-cache
-      - PHOTO_WEIGHT=${PHOTO_WEIGHT:-0}
       - PHOTO_MODE=${PHOTO_MODE:-any}
       - PHOTO_PROVIDERS=${PHOTO_PROVIDERS:-panoramax}
 

@@ -5,7 +5,6 @@ set -euo pipefail
 REGION="${OSM_REGION:-centre}"
 PHOTO_MODE="${PHOTO_MODE:-any}" # any | only360
 PHOTO_PROVIDERS="${PHOTO_PROVIDERS:-panoramax}"
-PHOTO_WEIGHT="${PHOTO_WEIGHT:-0}"
 PHOTO_COVERAGE_FILE="${PHOTO_COVERAGE_FILE:-/data/panoramax_coverage.bin}"
 H3_RES="${H3_RES:-12}"
 FORCE_DOWNLOAD="${OSM_FORCE_DOWNLOAD:-false}"
@@ -58,7 +57,7 @@ if [ "${PBF_SIZE}" -lt 100000 ]; then
 fi
 
 # Build Panoramax coverage if requested
-if [ "${PHOTO_WEIGHT}" != "0" ] || [ "${PHOTO_MODE}" != "any" ] || [ -n "${PHOTO_PROVIDERS}" ]; then
+if [ "${PHOTO_MODE}" != "any" ] || [ -n "${PHOTO_PROVIDERS}" ]; then
   if [ ! -f "${PHOTO_COVERAGE_FILE}" ]; then
     echo "Generating Panoramax coverage grid..."
     python3 /usr/local/bin/panoramax_preprocess.py \
@@ -78,7 +77,6 @@ exec java ${JAVA_OPTS} \
   -Ddw.graphhopper.datareader.file="${PBF_FILE}" \
   -Ddw.graphhopper.graph.location="${GRAPH_DIR}" \
   -Ddw.graphhopper.photo_coverage.file="${PHOTO_COVERAGE_FILE}" \
-  -Ddw.graphhopper.photo_weight="${PHOTO_WEIGHT}" \
   -Ddw.graphhopper.photo_mode="${PHOTO_MODE}" \
   -Ddw.graphhopper.photo_providers="${PHOTO_PROVIDERS}" \
   -Ddw.graphhopper.custom_models.directory="${CUSTOM_MODELS_DIR}" \

@@ -8,8 +8,8 @@ import com.carrotsearch.hppc.LongIntHashMap;
  *
  * photoCells : every cell with at least one photo.
  * cells360   : subset where at least one photo is 360°.
- * minDates   : days-since-epoch of earliest photo per cell (0 = unknown → treated as always covered).
- * maxDates   : days-since-epoch of latest photo per cell.
+ * minDates   : days since 1000-01-01 of earliest photo per cell (0 = unknown → treated as always covered).
+ * maxDates   : days since 1000-01-01 of latest photo per cell.
  * hasDates   : true when per-cell date data is available (PCB2 file).
  */
 public class PhotoCoverageData {
@@ -35,17 +35,17 @@ public class PhotoCoverageData {
         this.hasDates = minDates != null;
     }
 
-    /** Days-since-epoch of earliest photo for this cell, or 1 if unknown (→ treated as always covered). */
+    /** Days since 1000-01-01 of earliest photo for this cell, or 1 if unknown (→ treated as always covered). */
     public int getMinDate(long cellId) {
         if (minDates == null) return 1;
         int v = minDates.getOrDefault(cellId, 0);
-        return v == 0 ? 1 : v;
+        return v > 0 ? v : 1;
     }
 
-    /** Days-since-epoch of latest photo for this cell, or 65534 if unknown (→ treated as always covered). */
+    /** Days since 1000-01-01 of latest photo for this cell, or 1048575 if unknown (→ treated as always covered). */
     public int getMaxDate(long cellId) {
-        if (maxDates == null) return 65534;
+        if (maxDates == null) return 1048575;
         int v = maxDates.getOrDefault(cellId, 0);
-        return v == 0 ? 65534 : v;
+        return v > 0 ? v : 1048575;
     }
 }

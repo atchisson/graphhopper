@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\antoi\\\\Desktop\\\\missing_mapillary_gh-routing\" -Recurse -File | Where-Object { $_.Extension -match '\\\\.\\(js|jsx|ts|tsx|json|html|css|vue\\)$' } | Select-Object -First 50 FullName)",
+      "Bash(git -C \"c:\\\\Users\\\\antoi\\\\Desktop\\\\missing_mapillary_gh-routing\" diff --stat)",
+      "Bash(git -C \"c:\\\\Users\\\\antoi\\\\Desktop\\\\missing_mapillary_gh-routing\" log --oneline -3)",
+      "Bash(git -C \"c:\\\\Users\\\\antoi\\\\Desktop\\\\missing_mapillary_gh-routing\" show HEAD:js/routing/customModel.js)"
+    ]
+  }
+}

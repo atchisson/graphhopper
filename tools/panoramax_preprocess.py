@@ -21,18 +21,20 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 
 import h3
+import pyarrow as pa
 import pyarrow.parquet as pq
 
-_EPOCH = datetime.date(1970, 1, 1)
+_EPOCH = datetime.date(1000, 1, 1)
 
 
 def _days_since_epoch(dt_value) -> Optional[int]:
-    """Return days since 1970-01-01 from a datetime-like value, or None."""
+    """Return days since 1000-01-01 from a datetime-like value, or None if invalid or before epoch."""
     if dt_value is None:
         return None
     try:
         d = dt_value.date() if hasattr(dt_value, "date") else dt_value
-        return (d - _EPOCH).days
+        days = (d - _EPOCH).days
+        return days if days > 0 else None
     except Exception:
         return None
 
@@ -251,12 +253,18 @@ def _validate_bbox(
 def read_max_datetime(parquet_path: Path) -> str | None:
     """Return the max datetime found in parquet row-group statistics (ISO date, no full scan)."""
     try:
+        import pyarrow as pa
         meta = pq.read_metadata(parquet_path)
         schema = meta.schema.to_arrow_schema()
         col_names = [schema.field(i).name for i in range(len(schema))]
         if "datetime" not in col_names:
             return None
         col_idx = col_names.index("datetime")
+        dt_type = schema.field(col_idx).type
+        if not (pa.types.is_timestamp(dt_type) or pa.types.is_date(dt_type)):
+            # Column exists but is not a proper temporal type (e.g. string/bytes);
+            # statistics would be uninterpretable — fall through to full scan below.
+            return _read_max_datetime_scan(parquet_path)
         max_dt = None
         for rg in range(meta.num_row_groups):
             stats = meta.row_group(rg).column(col_idx).statistics
@@ -268,10 +276,31 @@ def read_max_datetime(parquet_path: Path) -> str | None:
         # stats.max is a datetime-like or timestamp int depending on pyarrow version
         if hasattr(max_dt, "strftime"):
             return max_dt.strftime("%Y-%m-%d")
-        # fallback: convert from microseconds epoch
-        import datetime
+        # fallback: microseconds since Unix epoch
         dt = datetime.datetime.utcfromtimestamp(int(max_dt) / 1_000_000)
         return dt.strftime("%Y-%m-%d")
+    except Exception as e:
+        print(f"WARNING: could not read max datetime from parquet: {e}", file=sys.stderr)
+        return None
+
+
+def _read_max_datetime_scan(parquet_path: Path) -> str | None:
+    """Full-scan fallback: find the max value in the 'datetime' string column."""
+    try:
+        parquet = pq.ParquetFile(parquet_path)
+        max_dt = None
+        for rg in range(parquet.num_row_groups):
+            tbl = parquet.read_row_group(rg, columns=["datetime"])
+            col = tbl.column("datetime")
+            for val in col:
+                v = val.as_py()
+                days = _days_since_epoch(v)
+                if days is not None:
+                    if max_dt is None or days > max_dt:
+                        max_dt = days
+        if max_dt is None:
+            return None
+        return (_EPOCH + datetime.timedelta(days=max_dt)).isoformat()
     except Exception as e:
         print(f"WARNING: could not read max datetime from parquet: {e}", file=sys.stderr)
         return None

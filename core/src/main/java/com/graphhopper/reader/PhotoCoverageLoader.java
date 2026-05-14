@@ -20,8 +20,8 @@ import java.nio.file.Path;
  *   8 bytes  n_cells (int64)
  *   n_cells * 24 bytes:
  *     8 bytes  cell_id       (int64)
- *     4 bytes  min_date      (int32, days since 1970-01-01; 0 = unknown)
- *     4 bytes  max_date      (int32, days since 1970-01-01; 0 = unknown)
+ *     4 bytes  min_date      (int32, days since 1000-01-01; 0 = unknown)
+ *     4 bytes  max_date      (int32, days since 1000-01-01; 0 = unknown)
  *     4 bytes  photo_count   (int32)
  *     4 bytes  pano360_count (int32)
  */
