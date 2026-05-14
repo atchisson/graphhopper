@@ -8,6 +8,7 @@ PHOTO_PROVIDERS="${PHOTO_PROVIDERS:-panoramax}"
 PHOTO_COVERAGE_FILE="${PHOTO_COVERAGE_FILE:-/data/panoramax_coverage.bin}"
 H3_RES="${H3_RES:-12}"
 FORCE_DOWNLOAD="${OSM_FORCE_DOWNLOAD:-false}"
+PARQUET_URL="${PARQUET_URL:-}"
 case "${REGION}" in
   centre|centre-val-de-loire)
     PBF_URL="https://download.geofabrik.de/europe/france/centre-latest.osm.pbf"
@@ -31,6 +32,17 @@ PARQUET_PATH="${PARQUET_PATH:-${DATA_DIR}/panoramax.parquet}"
 
 mkdir -p "${DATA_DIR}" "${GRAPH_DIR}" "${CUSTOM_MODELS_DIR}"
 
+# Download Panoramax parquet if a URL is provided and the file is absent or refresh is forced
+if [ -n "${PARQUET_URL}" ]; then
+  if [ "${FORCE_DOWNLOAD}" = "true" ] || [ ! -f "${PARQUET_PATH}" ]; then
+    echo "Downloading Panoramax parquet from ${PARQUET_URL}..."
+    curl -fL --retry 3 --retry-delay 5 --retry-connrefused --progress-bar \
+      "${PARQUET_URL}" -o "${PARQUET_PATH}" 2>&1 | tr '\r' '\n'
+  else
+    echo "Reusing existing parquet: ${PARQUET_PATH}"
+  fi
+fi
+
 PBF_SIZE=0
 if [ -f "${PBF_FILE}" ]; then
   PBF_SIZE=$(stat -c%s "${PBF_FILE}" || echo 0)
@@ -44,7 +56,7 @@ fi
 
 if [ "${PBF_SIZE}" -lt 100000 ]; then
   echo "Downloading OSM extract for ${REGION_SLUG}..."
-  curl -fL --retry 3 --retry-delay 2 --retry-connrefused --progress-bar "${PBF_URL}" -o "${PBF_FILE}" 2>&1 | tr '\r' '\n'
+  curl -fL --retry 5 --retry-delay 10 --retry-connrefused -C - --progress-bar "${PBF_URL}" -o "${PBF_FILE}" 2>&1 | tr '\r' '\n'
 else
   echo "Reusing existing PBF: ${PBF_FILE}"
 fi
@@ -56,15 +68,28 @@ if [ "${PBF_SIZE}" -lt 100000 ]; then
   exit 1
 fi
 
+# Fetch parquet Last-Modified date via HEAD if not already known
+if [ -n "${PARQUET_URL}" ] && [ ! -f "${PARQUET_PATH}.lastmod" ]; then
+  lastmod=$(curl -sI "${PARQUET_URL}" | grep -i "^last-modified:" | cut -d' ' -f2- | tr -d '\r\n')
+  if [ -n "$lastmod" ]; then
+    date -d "$lastmod" "+%Y-%m-%d" > "${PARQUET_PATH}.lastmod" 2>/dev/null || true
+  fi
+fi
+
 # Build Panoramax coverage if requested
 if [ "${PHOTO_MODE}" != "any" ] || [ -n "${PHOTO_PROVIDERS}" ]; then
   if [ ! -f "${PHOTO_COVERAGE_FILE}" ]; then
     echo "Generating Panoramax coverage grid..."
+    PREPROCESS_EXTRA_ARGS=""
+    if [ -f "${PARQUET_PATH}.lastmod" ]; then
+      PREPROCESS_EXTRA_ARGS="--date $(cat "${PARQUET_PATH}.lastmod")"
+    fi
     python3 /usr/local/bin/panoramax_preprocess.py \
       --region "${REGION_SLUG}" \
       --output "${PHOTO_COVERAGE_FILE}" \
       --parquet-path "${PARQUET_PATH}" \
-      --h3-res "${H3_RES}"
+      --h3-res "${H3_RES}" \
+      ${PREPROCESS_EXTRA_ARGS}
   else
     echo "Reusing existing Panoramax coverage: ${PHOTO_COVERAGE_FILE}"
   fi

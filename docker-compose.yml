@@ -9,11 +9,14 @@ services:
       - GRAPH_DIR=/data/graph-cache
       - PHOTO_MODE=${PHOTO_MODE:-any}
       - PHOTO_PROVIDERS=${PHOTO_PROVIDERS:-panoramax}
+      - PARQUET_URL=${PARQUET_URL:-https://api.panoramax.xyz/data/geoparquet/panoramax.parquet}
+      - OSM_FORCE_DOWNLOAD=${OSM_FORCE_DOWNLOAD:-false}
 
     ports:
       - "8989:8989"
       - "8990:8990"
     volumes:
       - ./data:/data
+    cpus: "${DOCKER_CPUS:-0}"
     tty: true
     restart: unless-stopped

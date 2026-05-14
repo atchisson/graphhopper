@@ -274,11 +274,15 @@ def read_max_datetime(parquet_path: Path) -> str | None:
         if max_dt is None:
             return None
         # stats.max is a datetime-like or timestamp int depending on pyarrow version
-        if hasattr(max_dt, "strftime"):
-            return max_dt.strftime("%Y-%m-%d")
-        # fallback: microseconds since Unix epoch
-        dt = datetime.datetime.utcfromtimestamp(int(max_dt) / 1_000_000)
-        return dt.strftime("%Y-%m-%d")
+        try:
+            if hasattr(max_dt, "strftime"):
+                return max_dt.strftime("%Y-%m-%d")
+            # fallback: microseconds since Unix epoch
+            dt = datetime.datetime.fromtimestamp(int(max_dt) / 1_000_000, tz=datetime.timezone.utc)
+            return dt.strftime("%Y-%m-%d")
+        except (ValueError, TypeError, OSError):
+            # Stats corrupted (UUID string instead of timestamp) — full scan fallback
+            return _read_max_datetime_scan(parquet_path)
     except Exception as e:
         print(f"WARNING: could not read max datetime from parquet: {e}", file=sys.stderr)
         return None
@@ -364,6 +368,9 @@ def main():
     parser.add_argument(
         "--h3-res", type=int, default=12, help="H3 resolution (default 12)"
     )
+    parser.add_argument(
+        "--date", default=None, help="Override coverage date (YYYY-MM-DD); skips parquet content scan"
+    )
     args = parser.parse_args()
 
     parquet_path = Path(args.parquet_path)
@@ -380,11 +387,15 @@ def main():
     bbox = REGION_BBOX.get(region_key, REGION_BBOX["france"])
     output_path = Path(args.output)
 
-    max_dt = read_max_datetime(parquet_path)
-    if max_dt:
-        print(f"Parquet max datetime: {max_dt}", file=sys.stderr)
+    if args.date:
+        max_dt = args.date
+        print(f"Coverage date (from --date): {max_dt}", file=sys.stderr)
     else:
-        print("WARNING: could not determine parquet max datetime", file=sys.stderr)
+        max_dt = read_max_datetime(parquet_path)
+        if max_dt:
+            print(f"Parquet max datetime: {max_dt}", file=sys.stderr)
+        else:
+            print("WARNING: could not determine parquet max datetime", file=sys.stderr)
 
     counts = aggregate(parquet_path, bbox, args.h3_res)
 
