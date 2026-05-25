@@ -171,13 +171,16 @@ $pbfLastMod     = (Get-RemoteHeaders $PbfUrl)["Last-Modified"]
 
 $stored = Load-Etags
 
-if ($parquetEtag -eq $stored.parquet -and $pbfLastMod -eq $stored.pbf) {
-    Log "Aucune mise a jour disponible. Fin du script."
+$parquetUpdated = $parquetEtag -ne $stored.parquet
+$pbfUpdated     = $pbfLastMod  -ne $stored.pbf
+
+if (-not $parquetUpdated) {
+    Log "Parquet inchange -- aucun recalcul necessaire. Fin du script."
     exit 0
 }
 
-if ($parquetEtag -ne $stored.parquet) { Log "Nouveau parquet : $parquetEtag" }
-if ($pbfLastMod  -ne $stored.pbf)     { Log "Nouveau PBF     : $pbfLastMod" }
+Log "Nouveau parquet : $parquetEtag"
+if ($pbfUpdated) { Log "Nouveau PBF     : $pbfLastMod" }
 
 Notify "GraphHopper - Build demarre" "Nouvelles donnees detectees, build en cours..."
 Show-Tray "Nettoyage du cache..."
@@ -241,25 +244,32 @@ Stop-DockerIfStartedByUs $weStartedDocker
 # ============================================================
 # 5. SYNCHRONISATION VERS LE NAS
 # ============================================================
-Log "=== Sync vers le NAS ($NasPath) ==="
-New-Item -ItemType Directory -Force -Path $NasPath | Out-Null
-
-robocopy "$DataDir\graph-cache" "$NasPath\graph-cache" /E /PURGE /NFL /NDL /NJH /NJS
-if ($LASTEXITCODE -ge 8) { Log "ERREUR robocopy (code $LASTEXITCODE)"; exit 1 }
-
-Get-Item "$DataDir\panoramax_coverage.*" | Copy-Item -Destination "$NasPath\" -Force
-
-@{
-    parquet      = $parquetEtag
-    pbf          = $pbfLastMod
-    built_at     = (Get-Date -Format "o")
-    region       = $PbfRegion
-} | ConvertTo-Json | Set-Content "$NasPath\.version.json" -Encoding UTF8
-
-# ============================================================
-# 6. SAUVEGARDE DES ETAGS
-# ============================================================
+# Les ETags sont sauvegardés avant la sync NAS : le build est terminé,
+# on évite un re-téléchargement/rebuild si le NAS est temporairement inaccessible.
 Save-Etags $parquetEtag $pbfLastMod
-Log "=== Termine avec succes ==="
+
+Log "=== Sync vers le NAS ($NasPath) ==="
+try {
+    New-Item -ItemType Directory -Force -Path $NasPath | Out-Null
+
+    robocopy "$DataDir\graph-cache" "$NasPath\graph-cache" /E /PURGE /NFL /NDL /NJH /NJS
+    if ($LASTEXITCODE -ge 8) { throw "robocopy graph-cache : code $LASTEXITCODE" }
+
+    Get-Item "$DataDir\panoramax_coverage.*" | Copy-Item -Destination "$NasPath\" -Force
+
+    @{
+        parquet      = $parquetEtag
+        pbf          = $pbfLastMod
+        built_at     = (Get-Date -Format "o")
+        region       = $PbfRegion
+    } | ConvertTo-Json | Set-Content "$NasPath\.version.json" -Encoding UTF8
+
+    Log "=== Termine avec succes ==="
+    Notify "GraphHopper - Build termine" "Graph-cache synchronise vers le NAS avec succes."
+} catch {
+    Log "ERREUR sync NAS : $_"
+    Notify "GraphHopper - Erreur NAS" "Sync NAS echouee : $_" -sound "Alarm"
+    Hide-Tray
+    exit 1
+}
 Hide-Tray
-Notify "GraphHopper - Build termine" "Graph-cache synchronise vers le NAS avec succes."
