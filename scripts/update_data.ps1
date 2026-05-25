@@ -196,14 +196,13 @@ Remove-Item -Force          "$DataDir\panoramax_coverage.*"  -ErrorAction Silent
 # 3. TELECHARGEMENTS (Windows natif, evite le bridge WSL2)
 # ============================================================
 Show-Tray "Telechargement parquet + PBF..."
-if ($parquetEtag -ne $stored.parquet) {
-    Remove-Item -Force "$DataDir\panoramax.parquet" -ErrorAction SilentlyContinue
-    Download-File $ParquetUrl "$DataDir\panoramax.parquet"
-    if ($parquetLastMod) {
-        $parquetDate = [DateTime]::Parse($parquetLastMod).ToString("yyyy-MM-dd")
-        Set-Content "$DataDir\panoramax.parquet.lastmod" $parquetDate -Encoding UTF8 -NoNewline
-        Log "Date Last-Modified parquet : $parquetDate"
-    }
+Remove-Item -Force "$DataDir\panoramax.parquet"          -ErrorAction SilentlyContinue
+Remove-Item -Force "$DataDir\panoramax.parquet.lastmod"  -ErrorAction SilentlyContinue
+Download-File $ParquetUrl "$DataDir\panoramax.parquet"
+if ($parquetLastMod) {
+    $parquetDate = [DateTime]::Parse($parquetLastMod).ToString("yyyy-MM-dd")
+    Set-Content "$DataDir\panoramax.parquet.lastmod" $parquetDate -Encoding UTF8 -NoNewline
+    Log "Date Last-Modified parquet : $parquetDate"
 }
 if ($pbfLastMod -ne $stored.pbf) {
     Remove-Item -Force "$DataDir\$PbfRegion-latest.osm.pbf" -ErrorAction SilentlyContinue

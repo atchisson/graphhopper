@@ -103,6 +103,7 @@ public class InfoResource {
         info.data_date = properties.get("datareader.data.date");
         String coverageDate = properties.get("photo_coverage.date");
         if (!coverageDate.isEmpty()) info.coverage_date = coverageDate;
+        info.data_date = coverageDate;
         String coverageDateMin = properties.get("photo_coverage.date_min");
         if (!coverageDateMin.isEmpty()) info.coverage_date_min = coverageDateMin;
 
