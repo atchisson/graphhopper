@@ -7,7 +7,7 @@
 #   bash check_and_apply.sh
 #
 # Planification (cron — vérifier toutes les heures) :
-#   0 * * * * /chemin/vers/scripts/check_and_apply.sh >> /var/log/gh_apply.log 2>&1
+#   0 * * * * /mnt/user/appdata/graphhopper/scripts/check_and_apply.sh >> /var/log/gh_apply.log 2>&1
 #
 # Prérequis :
 #   - NAS monté sur $NAS_MOUNT (NFS, SMB/CIFS, etc.)
@@ -79,14 +79,11 @@ apply_update() {
     log "Arrêt du container..."
     docker compose -f "$COMPOSE_FILE" stop
 
-    log "Synchronisation graph-cache depuis le NAS..."
+    log "Synchronisation depuis le NAS..."
     mkdir -p "$DATA_DIR/graph-cache"
     rsync -a --delete --info=progress2 \
-        "$NAS_MOUNT/graph-cache/" \
-        "$DATA_DIR/graph-cache/"
-
-    log "Copie des fichiers panoramax_coverage..."
-    cp "$NAS_MOUNT"/panoramax_coverage.* "$DATA_DIR/"
+        "$NAS_MOUNT/" \
+        "$DATA_DIR/"
 
     log "Enregistrement de la version appliquée..."
     cp "$NAS_MOUNT/.version.json" "$APPLIED_VERSION"
