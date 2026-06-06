@@ -1006,12 +1006,12 @@ public class GraphHopper {
                 java.nio.file.Path datePath = dir.resolve(base + ".date");
                 java.nio.file.Path dateMinPath = dir.resolve(base + ".date_min");
                 if (Files.exists(datePath)) {
-                    String coverageDate = new String(Files.readAllBytes(datePath)).trim();
+                    String coverageDate = new String(Files.readAllBytes(datePath)).trim().replace("﻿", "");
                     properties.put("photo_coverage.date", coverageDate);
                     logger.info("Photo coverage date (max): {}", coverageDate);
                 }
                 if (Files.exists(dateMinPath)) {
-                    String coverageDateMin = new String(Files.readAllBytes(dateMinPath)).trim();
+                    String coverageDateMin = new String(Files.readAllBytes(dateMinPath)).trim().replace("﻿", "");
                     properties.put("photo_coverage.date_min", coverageDateMin);
                     logger.info("Photo coverage date (min): {}", coverageDateMin);
                 }

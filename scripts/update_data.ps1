@@ -73,6 +73,7 @@ function Load-Etags {
 
 function Save-Etags($parquet, $pbf) {
     @{ parquet = $parquet; pbf = $pbf } | ConvertTo-Json | Set-Content $EtagFile -Encoding UTF8
+    Log "ETags sauvegardes : parquet=$parquet pbf=$pbf"
 }
 
 function Download-File($url, $dest) {
@@ -201,7 +202,7 @@ Remove-Item -Force "$DataDir\panoramax.parquet.lastmod"  -ErrorAction SilentlyCo
 Download-File $ParquetUrl "$DataDir\panoramax.parquet"
 if ($parquetLastMod) {
     $parquetDate = [DateTime]::Parse($parquetLastMod).ToString("yyyy-MM-dd")
-    Set-Content "$DataDir\panoramax.parquet.lastmod" $parquetDate -Encoding UTF8 -NoNewline
+    Set-Content "$DataDir\panoramax.parquet.lastmod" $parquetDate -Encoding ascii -NoNewline
     Log "Date Last-Modified parquet : $parquetDate"
 }
 if ($pbfLastMod -ne $stored.pbf) {
