@@ -45,9 +45,13 @@ check_nas_mounted() {
 # ============================================================
 # COMPARAISON DES VERSIONS
 # ============================================================
+parse_built_at() {
+    grep -o '"built_at"[^"]*"[^"]*"' "$1" | sed 's/.*"built_at"[^"]*"\([^"]*\)".*/\1/'
+}
+
 update_needed() {
     local nas_built_at
-    nas_built_at=$(python3 -c "import json; print(json.load(open('$NAS_MOUNT/.version.json'))['built_at'])")
+    nas_built_at=$(parse_built_at "$NAS_MOUNT/.version.json")
 
     if [ ! -f "$APPLIED_VERSION" ]; then
         log "Aucune version locale — première application nécessaire."
@@ -55,7 +59,7 @@ update_needed() {
     fi
 
     local local_built_at
-    local_built_at=$(python3 -c "import json; print(json.load(open('$APPLIED_VERSION'))['built_at'])" 2>/dev/null || echo "")
+    local_built_at=$(parse_built_at "$APPLIED_VERSION" 2>/dev/null || echo "")
 
     if [ "$nas_built_at" != "$local_built_at" ]; then
         log "Nouvelle version NAS : $nas_built_at (locale : $local_built_at)"

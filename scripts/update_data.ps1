@@ -255,7 +255,7 @@ try {
     robocopy "$DataDir\graph-cache" "$NasPath\graph-cache" /E /PURGE /NFL /NDL /NJH /NJS
     if ($LASTEXITCODE -ge 8) { throw "robocopy graph-cache : code $LASTEXITCODE" }
 
-    Get-Item "$DataDir\panoramax_coverage.*" | Copy-Item -Destination "$NasPath\" -Force
+    Get-Item "$DataDir\panoramax_coverage.*" | Copy-Item -Destination $NasPath -Force
 
     @{
         parquet      = $parquetEtag
