@@ -124,6 +124,18 @@ public class Parameters {
          * https://github.com/graphhopper/graphhopper/blob/master/docs/core/routing.md#heading
          */
         public static final String PASS_THROUGH = "pass_through";
+        /**
+         * true or false. If true, edges already traversed by previous legs of a via-route are
+         * penalized so the route avoids passing the same road twice (in either direction).
+         * Only for flexible mode (ch.disable=true). See TRAVERSED_EDGE_FACTOR.
+         */
+        public static final String AVOID_TRAVERSED_EDGES = "avoid_traversed_edges";
+        /**
+         * Priority factor in (0, 1] applied to already traversed edges when
+         * avoid_traversed_edges=true. 1.0 disables the penalty, small values strongly avoid
+         * repeated edges. The edge weight is multiplied by 1/factor. Default: 0.1
+         */
+        public static final String TRAVERSED_EDGE_FACTOR = "traversed_edge_factor";
         public static final String POINT_HINT = "point_hint";
         public static final String CURBSIDE = "curbside";
         public static final String CURBSIDE_STRICTNESS = "curbside_strictness";
