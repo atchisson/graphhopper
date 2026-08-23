@@ -18,6 +18,9 @@
 package com.graphhopper.routing;
 
 import com.carrotsearch.hppc.IntArrayList;
+import com.carrotsearch.hppc.IntHashSet;
+import com.carrotsearch.hppc.IntSet;
+import com.carrotsearch.hppc.cursors.IntCursor;
 import com.graphhopper.routing.ev.EncodedValueLookup;
 import com.graphhopper.routing.ev.EnumEncodedValue;
 import com.graphhopper.routing.ev.RoadClass;
@@ -25,11 +28,13 @@ import com.graphhopper.routing.ev.RoadEnvironment;
 import com.graphhopper.routing.querygraph.QueryGraph;
 import com.graphhopper.routing.querygraph.VirtualEdgeIteratorState;
 import com.graphhopper.routing.util.*;
+import com.graphhopper.routing.weighting.AvoidEdgesWeighting;
 import com.graphhopper.storage.index.LocationIndex;
 import com.graphhopper.storage.index.Snap;
 import com.graphhopper.util.EdgeIterator;
 import com.graphhopper.util.EdgeIteratorState;
 import com.graphhopper.util.Helper;
+import com.graphhopper.util.Parameters;
 import com.graphhopper.util.shapes.GHPoint;
 
 import java.util.ArrayList;
@@ -98,13 +103,28 @@ public class ViaRouting {
 
     public static Result calcPaths(List<GHPoint> points, QueryGraph queryGraph, List<Snap> snaps,
                                    DirectedEdgeFilter directedEdgeFilter, PathCalculator pathCalculator,
-                                   List<String> curbsides, String curbsideStrictness, List<Double> headings, boolean passThrough, EncodingManager em) {
+                                   List<String> curbsides, String curbsideStrictness, List<Double> headings, boolean passThrough, EncodingManager em,
+                                   boolean avoidTraversedEdges, double traversedEdgePenalty) {
         if (!curbsides.isEmpty() && curbsides.size() != points.size())
             throw new IllegalArgumentException("If you pass " + CURBSIDE + ", you need to pass exactly one curbside for every point, empty curbsides will be ignored");
         if (!curbsides.isEmpty() && !headings.isEmpty())
             throw new IllegalArgumentException("You cannot use curbsides and headings or pass_through at the same time");
 
         Function<Snap, String> curbsideAutoFunction = CurbsideAutoHelper.createResolver(directedEdgeFilter, em);
+
+        // avoid_traversed_edges: penalize edges already used by previous legs (both directions)
+        // so the route loops back instead of doubling over the same road
+        IntSet traversedEdges = new IntHashSet();
+        if (avoidTraversedEdges) {
+            if (!(pathCalculator instanceof FlexiblePathCalculator))
+                throw new IllegalArgumentException("The '" + Parameters.Routing.AVOID_TRAVERSED_EDGES +
+                        "' parameter requires flexible routing, set ch.disable=true");
+            FlexiblePathCalculator flexPathCalculator = (FlexiblePathCalculator) pathCalculator;
+            AvoidEdgesWeighting avoidTraversedWeighting = new AvoidEdgesWeighting(flexPathCalculator.getWeighting())
+                    .setEdgePenaltyFactor(traversedEdgePenalty);
+            avoidTraversedWeighting.setAvoidedEdges(traversedEdges);
+            flexPathCalculator.setWeighting(avoidTraversedWeighting);
+        }
 
         final int legs = snaps.size() - 1;
         Result result = new Result(legs);
@@ -160,6 +180,11 @@ public class ViaRouting {
                 result.paths.add(path);
                 result.debug += ", " + path.getDebugInfo();
             }
+
+            if (avoidTraversedEdges)
+                for (Path path : paths)
+                    for (IntCursor c : path.getEdges())
+                        traversedEdges.add(c.value);
 
             result.visitedNodes += pathCalculator.getVisitedNodes();
             result.debug += ", visited nodes sum: " + result.visitedNodes;

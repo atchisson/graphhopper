@@ -243,11 +243,14 @@ public class Router {
         String curbsideStrictness = getCurbsideStrictness(request.getHints());
         if (passThrough)
             throw new IllegalArgumentException("Alternative paths and " + PASS_THROUGH + " at the same time is currently not supported");
+        if (getAvoidTraversedEdges(request.getHints()))
+            throw new IllegalArgumentException("Alternative paths and " + AVOID_TRAVERSED_EDGES + " at the same time is currently not supported");
         if (!request.getCurbsides().isEmpty())
             throw new IllegalArgumentException("Alternative paths do not support the " + CURBSIDE + " parameter yet");
 
         ViaRouting.Result result = ViaRouting.calcPaths(request.getPoints(), queryGraph, snaps, directedEdgeFilter,
-                pathCalculator, request.getCurbsides(), curbsideStrictness, request.getHeadings(), passThrough, encodingManager);
+                pathCalculator, request.getCurbsides(), curbsideStrictness, request.getHeadings(), passThrough, encodingManager,
+                false, 1.0);
         if (result.paths.isEmpty())
             throw new RuntimeException("Empty paths for alternative route calculation not expected");
 
@@ -276,8 +279,11 @@ public class Router {
         PathCalculator pathCalculator = solver.createPathCalculator(queryGraph);
         boolean passThrough = getPassThrough(request.getHints());
         String curbsideStrictness = getCurbsideStrictness(request.getHints());
+        boolean avoidTraversedEdges = getAvoidTraversedEdges(request.getHints());
+        double traversedEdgePenalty = getTraversedEdgePenalty(request.getHints());
         ViaRouting.Result result = ViaRouting.calcPaths(request.getPoints(), queryGraph, snaps, directedEdgeFilter,
-                pathCalculator, request.getCurbsides(), curbsideStrictness, request.getHeadings(), passThrough, encodingManager);
+                pathCalculator, request.getCurbsides(), curbsideStrictness, request.getHeadings(), passThrough, encodingManager,
+                avoidTraversedEdges, traversedEdgePenalty);
 
         if (request.getPoints().size() != result.paths.size() + 1)
             throw new RuntimeException("There should be exactly one more point than paths. points:" + request.getPoints().size() + ", paths:" + result.paths.size());
@@ -337,6 +343,17 @@ public class Router {
 
     private static boolean getPassThrough(PMap hints) {
         return hints.getBool(PASS_THROUGH, false);
+    }
+
+    private static boolean getAvoidTraversedEdges(PMap hints) {
+        return hints.getBool(AVOID_TRAVERSED_EDGES, false);
+    }
+
+    private static double getTraversedEdgePenalty(PMap hints) {
+        double factor = hints.getDouble(TRAVERSED_EDGE_FACTOR, 0.1);
+        if (factor <= 0 || factor > 1)
+            throw new IllegalArgumentException(TRAVERSED_EDGE_FACTOR + " must be in (0, 1], but was: " + factor);
+        return 1.0 / factor;
     }
 
     private static String getCurbsideStrictness(PMap hints) {
@@ -453,6 +470,9 @@ public class Router {
 
             if (getPassThrough(request.getHints()))
                 throw new IllegalArgumentException("The '" + Parameters.Routing.PASS_THROUGH + "' parameter is currently not supported for speed mode, you need to disable speed mode with `ch.disable=true`. See issue #1765");
+
+            if (getAvoidTraversedEdges(request.getHints()))
+                throw new IllegalArgumentException("The '" + Parameters.Routing.AVOID_TRAVERSED_EDGES + "' parameter is currently not supported for speed mode, you need to disable speed mode with `ch.disable=true`.");
 
             if (request.getCustomModel() != null)
                 throw new IllegalArgumentException("The 'custom_model' parameter is currently not supported for speed mode, you need to disable speed mode with `ch.disable=true`.");
