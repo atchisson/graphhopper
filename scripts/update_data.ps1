@@ -250,12 +250,7 @@ Save-Etags $parquetEtag $pbfLastMod
 
 Log "=== Sync vers le NAS ($NasPath) ==="
 try {
-    New-Item -ItemType Directory -Force -Path $NasPath | Out-Null
-
-    robocopy "$DataDir\graph-cache" "$NasPath\graph-cache" /E /PURGE /NFL /NDL /NJH /NJS
-    if ($LASTEXITCODE -ge 8) { throw "robocopy graph-cache : code $LASTEXITCODE" }
-
-    Get-Item "$DataDir\panoramax_coverage.*" | Copy-Item -Destination $NasPath -Force
+    [System.IO.Directory]::CreateDirectory($NasPath) | Out-Null
 
     @{
         parquet      = $parquetEtag
@@ -263,6 +258,9 @@ try {
         built_at     = (Get-Date -Format "o")
         region       = $PbfRegion
     } | ConvertTo-Json | Set-Content "$NasPath\.version.json" -Encoding UTF8
+
+    robocopy $DataDir $NasPath /E /PURGE /Z /MT:8 /NFL /NDL /NJH /NJS
+    if ($LASTEXITCODE -ge 8) { throw "robocopy data : code $LASTEXITCODE" }
 
     Log "=== Termine avec succes ==="
     Notify "GraphHopper - Build termine" "Graph-cache synchronise vers le NAS avec succes."
