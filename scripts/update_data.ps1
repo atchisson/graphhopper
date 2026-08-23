@@ -206,8 +206,9 @@ if ($parquetLastMod) {
     Log "Date Last-Modified parquet : $parquetDate"
 }
 if ($pbfLastMod -ne $stored.pbf) {
-    Remove-Item -Force "$DataDir\$PbfRegion-latest.osm.pbf" -ErrorAction SilentlyContinue
-    Download-File $PbfUrl "$DataDir\$PbfRegion-latest.osm.pbf"
+    # Nom attendu par docker-entrypoint.sh : /data/${REGION_SLUG}.osm.pbf (sans "-latest")
+    Remove-Item -Force "$DataDir\$PbfRegion.osm.pbf" -ErrorAction SilentlyContinue
+    Download-File $PbfUrl "$DataDir\$PbfRegion.osm.pbf"
 }
 
 # ============================================================
