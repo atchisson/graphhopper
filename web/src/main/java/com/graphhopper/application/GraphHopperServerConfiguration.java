@@ -19,6 +19,7 @@ package com.graphhopper.application;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.graphhopper.GraphHopperConfig;
+import com.graphhopper.application.analytics.MatomoConfig;
 import com.graphhopper.http.GraphHopperBundleConfiguration;
 import com.graphhopper.http.RealtimeConfiguration;
 import io.dropwizard.core.Configuration;
@@ -34,6 +35,9 @@ public class GraphHopperServerConfiguration extends Configuration implements Gra
     @JsonProperty
     private final RealtimeConfiguration gtfsRealtime = new RealtimeConfiguration();
 
+    @JsonProperty
+    private final MatomoConfig matomo = new MatomoConfig();
+
     public GraphHopperServerConfiguration() {
     }
 
@@ -45,5 +49,9 @@ public class GraphHopperServerConfiguration extends Configuration implements Gra
     @Override
     public RealtimeConfiguration gtfsrealtime() {
         return gtfsRealtime;
+    }
+
+    public MatomoConfig getMatomoConfiguration() {
+        return matomo;
     }
 }

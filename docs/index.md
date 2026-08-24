@@ -23,6 +23,7 @@ Install the GraphHopper routing engine with the GraphHopper Maps UI with [this i
 machine. This will also install a web API that can be used in many programming languages.
 
  * [Web API](./web/api-doc.md): Documentation to communicate with the GraphHopper server via http.
+ * [Server-side analytics](./web/analytics.md): Usage statistics via Matomo, reported from the server so content blockers do not distort them.
  * [Deployment Guide](./core/deploy.md): Details about deploying GraphHopper 
  * There are official API clients in [Java](https://github.com/graphhopper/graphhopper/tree/master/client-hc) and [JavaScript](https://github.com/graphhopper/directions-api-js-client).
 

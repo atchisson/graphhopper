@@ -4,6 +4,7 @@ target/
 *.osm
 nbactions*.xml
 /config.yml
+/.env
 build.xml
 maven/
 measurement*.properties

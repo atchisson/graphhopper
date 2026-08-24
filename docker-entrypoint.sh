@@ -98,7 +98,32 @@ fi
 cd /graphhopper
 JAVA_OPTS="${JAVA_OPTS:--Xmx4g}"
 
+# Server-side Matomo analytics. Passed as -Ddw. overrides rather than written into config-example.yml,
+# because that file is tracked in git and the auth token is a secret. See docs/web/analytics.md
+MATOMO_OPTS=()
+if [ "${MATOMO_ENABLED:-false}" = "true" ]; then
+  MATOMO_OPTS+=(-Ddw.matomo.enabled=true)
+  for pair in \
+    "url:${MATOMO_URL:-}" \
+    "site_id:${MATOMO_SITE_ID:-}" \
+    "token_auth:${MATOMO_TOKEN_AUTH:-}" \
+    "site_url:${MATOMO_SITE_URL:-}" \
+    "visitor_id_salt:${MATOMO_VISITOR_ID_SALT:-}" \
+    "trust_forwarded_for:${MATOMO_TRUST_FORWARDED_FOR:-}" \
+    "anonymize_ip:${MATOMO_ANONYMIZE_IP:-}" \
+    "track_api_requests:${MATOMO_TRACK_API_REQUESTS:-}" \
+    "api_sample_rate:${MATOMO_API_SAMPLE_RATE:-}"; do
+    key="${pair%%:*}"
+    value="${pair#*:}"
+    if [ -n "${value}" ]; then
+      MATOMO_OPTS+=(-Ddw.matomo."${key}"="${value}")
+    fi
+  done
+  echo "Matomo tracking enabled -> ${MATOMO_URL:-<no url set>}"
+fi
+
 exec java ${JAVA_OPTS} \
+  "${MATOMO_OPTS[@]}" \
   -Ddw.graphhopper.datareader.file="${PBF_FILE}" \
   -Ddw.graphhopper.graph.location="${GRAPH_DIR}" \
   -Ddw.graphhopper.photo_coverage.file="${PHOTO_COVERAGE_FILE}" \

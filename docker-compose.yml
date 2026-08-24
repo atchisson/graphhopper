@@ -11,6 +11,16 @@ services:
       - PHOTO_PROVIDERS=${PHOTO_PROVIDERS:-panoramax}
       - PARQUET_URL=${PARQUET_URL:-https://api.panoramax.xyz/data/geoparquet/panoramax.parquet}
       - OSM_FORCE_DOWNLOAD=${OSM_FORCE_DOWNLOAD:-false}
+      # Server-side Matomo analytics, see docs/web/analytics.md.
+      # Put the real values in a .env file next to this one (gitignored) - never in config-example.yml.
+      - MATOMO_ENABLED=${MATOMO_ENABLED:-false}
+      - MATOMO_URL=${MATOMO_URL:-}
+      - MATOMO_SITE_ID=${MATOMO_SITE_ID:-}
+      - MATOMO_TOKEN_AUTH=${MATOMO_TOKEN_AUTH:-}
+      - MATOMO_SITE_URL=${MATOMO_SITE_URL:-}
+      - MATOMO_VISITOR_ID_SALT=${MATOMO_VISITOR_ID_SALT:-}
+      - MATOMO_TRUST_FORWARDED_FOR=${MATOMO_TRUST_FORWARDED_FOR:-}
+      - MATOMO_API_SAMPLE_RATE=${MATOMO_API_SAMPLE_RATE:-}
 
     ports:
       - "8989:8989"

@@ -17,6 +17,7 @@
  */
 package com.graphhopper.application;
 
+import com.graphhopper.application.analytics.MatomoTracking;
 import com.graphhopper.application.cli.ImportCommand;
 import com.graphhopper.application.cli.MatchCommand;
 import com.graphhopper.application.resources.RootResource;
@@ -52,5 +53,6 @@ public final class GraphHopperApplication extends Application<GraphHopperServerC
         environment.jersey().register(new RootResource());
         environment.jersey().register(NavigateResource.class);
         environment.servlets().addFilter("cors", CORSFilter.class).addMappingForUrlPatterns(EnumSet.allOf(DispatcherType.class), false, "*");
+        MatomoTracking.register(configuration.getMatomoConfiguration(), environment);
     }
 }

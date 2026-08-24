@@ -113,7 +113,7 @@ graphhopper:
     car_access, car_average_speed, country, road_class, roundabout, max_speed,
     foot_access, foot_average_speed, foot_priority, foot_road_access, hike_rating, average_slope,
     bike_access, bike_average_speed, bike_priority, bike_road_access, bike_network, mtb_rating, ferry_speed,
-    road_environment, photo_coverage, photo_coverage_only360
+    road_environment, photo_coverage, photo_coverage_only360, toll
 
   #### Speed, hybrid and flexible mode ####
 
@@ -268,6 +268,41 @@ graphhopper:
   # GraphHopper applies country-specific routing rules during import (not enabled by default).
   # You need to redo the import for changes to take effect.
   # country_rules.enabled: true
+
+# Server-side Matomo analytics. Everything is sent from the server through the Matomo HTTP Tracking API,
+# so no JavaScript is loaded in the browser and content blockers cannot suppress it.
+# The map UI pages are reported as page views, the routing endpoints as Matomo events
+# (category "API", action = endpoint, name = profile, value = response time in ms).
+# Tracking runs on a background thread with a bounded queue: if Matomo is slow or down, hits are dropped
+# and routing requests are never affected.
+matomo:
+  enabled: false
+  # tracking endpoint of your Matomo instance
+  url: https://analytics.example.com/matomo.php
+  site_id: 1
+  # required: without it Matomo ignores the visitor IP/user agent we send and counts every visit as this server.
+  # Create one in Matomo under Administration > Personal > Security > Auth tokens.
+  token_auth: ""
+  # base URL used to build the page URLs reported to Matomo
+  site_url: https://maps.example.com
+  # zero the last octet (IPv4) / last 80 bits (IPv6) before sending the IP
+  anonymize_ip: true
+  # read the client IP from X-Forwarded-For - only enable this behind a trusted reverse proxy
+  trust_forwarded_for: false
+  # any random string, keeps the pseudonymous visitor ids stable across restarts
+  visitor_id_salt: ""
+  # count the routing endpoints, not just the UI page views
+  track_api_requests: true
+  # report only a fraction of the API requests (1.0 = all). Page views are never sampled.
+  api_sample_rate: 1.0
+  # excluded_paths: [/health, /healthcheck, /info, /i18n, /mvt, /pt-mvt, /webjars, /favicon.ico]
+  # query parameters kept in the reported URL, everything else (coordinates in particular) is dropped
+  # tracked_query_params: [profile, vehicle, weighting, algorithm, locale, layer, elevation, type]
+  # queue_capacity: 10000
+  # batch_size: 50
+  # flush_interval_ms: 5000
+  # connect_timeout_ms: 5000
+  # request_timeout_ms: 10000
 
 # Dropwizard server configuration
 server:
