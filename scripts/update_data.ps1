@@ -10,7 +10,17 @@
     Ce script se contente de : verifier les ETags, trigger Docker, sync NAS.
 
     Planification (Task Scheduler) -- executer une seule fois register_task.ps1.
+
+.PARAMETER Force
+    Rebuild meme si les sources distantes sont inchangees. Necessaire quand
+    c'est la config du routeur qui a change (graph.encoded_values par exemple)
+    et pas les donnees : l'ETag du parquet ne bouge pas, mais le graphe doit
+    quand meme etre reimporte.
 #>
+
+param(
+    [switch]$Force
+)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
@@ -175,9 +185,13 @@ $stored = Load-Etags
 $parquetUpdated = $parquetEtag -ne $stored.parquet
 $pbfUpdated     = $pbfLastMod  -ne $stored.pbf
 
-if (-not $parquetUpdated) {
+if (-not $parquetUpdated -and -not $Force) {
     Log "Parquet inchange -- aucun recalcul necessaire. Fin du script."
     exit 0
+}
+
+if ($Force -and -not $parquetUpdated) {
+    Log "Mode -Force : sources inchangees, rebuild demande explicitement."
 }
 
 Log "Nouveau parquet : $parquetEtag"
@@ -197,9 +211,17 @@ Remove-Item -Force          "$DataDir\panoramax_coverage.*"  -ErrorAction Silent
 # 3. TELECHARGEMENTS (Windows natif, evite le bridge WSL2)
 # ============================================================
 Show-Tray "Telechargement parquet + PBF..."
-Remove-Item -Force "$DataDir\panoramax.parquet"          -ErrorAction SilentlyContinue
-Remove-Item -Force "$DataDir\panoramax.parquet.lastmod"  -ErrorAction SilentlyContinue
-Download-File $ParquetUrl "$DataDir\panoramax.parquet"
+# Sur un rebuild -Force a sources inchangees, le parquet deja sur disque est le
+# bon : inutile de retelecharger plusieurs Go. Le coverage a ete purge plus haut,
+# il sera de toute facon recalcule a partir de ce parquet.
+$parquetPath = "$DataDir\panoramax.parquet"
+if ($parquetUpdated -or -not (Test-Path $parquetPath)) {
+    Remove-Item -Force $parquetPath                          -ErrorAction SilentlyContinue
+    Remove-Item -Force "$DataDir\panoramax.parquet.lastmod"  -ErrorAction SilentlyContinue
+    Download-File $ParquetUrl $parquetPath
+} else {
+    Log "Parquet inchange et deja present -- telechargement saute."
+}
 if ($parquetLastMod) {
     $parquetDate = [DateTime]::Parse($parquetLastMod).ToString("yyyy-MM-dd")
     Set-Content "$DataDir\panoramax.parquet.lastmod" $parquetDate -Encoding ascii -NoNewline
@@ -221,7 +243,10 @@ $weStartedDocker = Start-DockerIfNeeded
 $env:DOCKER_CPUS = [Math]::Max(1, [Math]::Floor($env:NUMBER_OF_PROCESSORS / 2))
 Log "CPU alloues au container : $($env:DOCKER_CPUS) / $($env:NUMBER_OF_PROCESSORS)"
 Show-Tray "Preprocessing + import GraphHopper..."
-docker compose up -d
+# --build comme en prod : sans lui l'image locale reste figee et le graphe est
+# reimporte avec l'ancienne config, notamment l'ancienne liste encoded_values.
+docker compose up -d --build
+if ($LASTEXITCODE -ne 0) { throw "docker compose up --build : code $LASTEXITCODE" }
 Remove-Item Env:\DOCKER_CPUS -ErrorAction SilentlyContinue
 
 try {
