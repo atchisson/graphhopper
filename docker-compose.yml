@@ -26,7 +26,8 @@ services:
       - "8989:8989"
       - "8990:8990"
     volumes:
-      - ./data:/data
+      # Dossier de donnees sur l'hote : surchargeable via DATA_PATH dans .env (defaut ./data).
+      - ${DATA_PATH:-./data}:/data
     cpus: "${DOCKER_CPUS:-0}"
     tty: true
     restart: unless-stopped

@@ -134,7 +134,7 @@ Pick the extract with `OSM_REGION` (`centre` | `france`):
 OSM_REGION=france docker compose up
 ```
 
-Data and the generated graph are stored in `./data` on the host, so restarts do not re-download. Ports `8989` (web UI/API) and `8990` (Jetty admin) are exposed.
+Data and the generated graph are stored in `./data` on the host (override with `DATA_PATH` in `.env`), so restarts do not re-download. Ports `8989` (web UI/API) and `8990` (Jetty admin) are exposed.
 
 ## GraphHopper Maps
 
